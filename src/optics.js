@@ -7,19 +7,19 @@ const PI=Math.PI, Y=[0.2126,0.7152,0.0722];
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // 出典の窓寸法と光学的な有効発光面は別物。未記載の値を製品仕様にしない。
 const ledProfiles={
- 'WS2812B':{packageSize:5.4,windowDiameter:4,angle:null,assumedAperture:2.8,assumedAngle:120,
+ 'WS2812B':{packageCode:'5050',packageSize:5.4,windowDiameter:4,angle:null,assumedAperture:2.8,assumedAngle:120,
   revision:'Worldsemi WS2812B V1.4（2018-07-19）',pages:'p.2 機械寸法',
   datasheetUrl:'https://docid81hrs3j1.cloudfront.net/medialibrary/2018/10/WS2812B_V1.4_EN_18090714224701.pdf'},
- 'WS2812B-MINI':{packageSize:3.46,windowDiameter:2.85,angle:null,assumedAperture:1.9,assumedAngle:120,
+ 'WS2812B-MINI':{packageCode:'3535',packageSize:3.46,windowDiameter:2.85,angle:null,assumedAperture:1.9,assumedAngle:120,
   revision:'Worldsemi WS2812B-Mini-V3 V3.0（2019-01-23）',pages:'p.2 機械寸法',
   datasheetUrl:'https://www.peace-corp.co.jp/data/WS2812B-Mini-V3_V3.0_EN.pdf'},
- 'WS2812C-2020':{packageSize:2.2,windowDiameter:null,angle:null,assumedAperture:1.1,assumedAngle:120,
+ 'WS2812C-2020':{packageCode:'2020',packageSize:2.2,windowDiameter:null,angle:null,assumedAperture:1.1,assumedAngle:120,
   revision:'Worldsemi WS2812C-2020 V1.2（2019-01-04）',pages:'p.1 機械寸法',
   datasheetUrl:'https://cdn.sparkfun.com/assets/e/1/0/f/b/WS2812C-2020_V1.2_EN_19112716191654.pdf'},
- 'SK6812':{packageSize:5.4,windowDiameter:null,angle:120,assumedAperture:2.8,assumedAngle:120,
+ 'SK6812':{packageCode:'5050',packageSize:5.4,windowDiameter:null,angle:120,assumedAperture:2.8,assumedAngle:120,
   revision:'OPSCO SK6812-012 Rev.B/1（2025-08-11）',pages:'p.3 光学特性 / p.4 機械寸法',
   datasheetUrl:'https://datasheet.lcsc.com/datasheet/pdf/9f469126feffa69bd23486dc2acd2d83.pdf'},
- 'SK6812-MINI':{packageSize:3.7,windowDiameter:null,angle:120,assumedAperture:1.9,assumedAngle:120,
+ 'SK6812-MINI':{packageCode:'3535',packageSize:3.7,windowDiameter:null,angle:120,assumedAperture:1.9,assumedAngle:120,
   revision:'OPSCO SK6812MINI-012 Rev.B/0（2024-04-23）',pages:'p.3 光学特性 / p.4 機械寸法',
   datasheetUrl:'https://datasheet.lcsc.com/datasheet/pdf/9596115a5796613b5408a09f63fb1427.pdf'}
 };

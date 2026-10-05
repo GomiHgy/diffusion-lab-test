@@ -65,6 +65,7 @@ python -m pip install -r requirements-dev.txt
 python -m playwright install chromium
 python tests/test_browser.py
 python tests/test_features.py
+python tests/test_interactions.py
 ```
 
 LinuxのCIでOSライブラリも導入する場合は、同梱ワークフローと同じ次のコマンドを使います。

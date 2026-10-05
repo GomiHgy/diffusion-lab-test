@@ -29,7 +29,7 @@ class HTMLInventory(HTMLParser):
             self.ids.append(a['id'])
         if tag in ('script', 'img', 'iframe', 'audio', 'video', 'source') and a.get('src'):
             self.auto_loads.append(a['src'])
-        if tag == 'link' and a.get('href'):
+        if tag == 'link' and a.get('href') and not a['href'].startswith('data:'):
             self.auto_loads.append(a['href'])
         for attr in ('src', 'href'):
             if a.get(attr, '').startswith('/'):

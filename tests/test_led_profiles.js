@@ -128,3 +128,52 @@ test('The selected full viewing angle maps to half normal intensity at each half
   close(recoveredIntensity,.5);
  }
 });
+
+test('Switching between 5050 and 2020 products applies package clearance to automatic placement',()=>{
+ const design=O.normalize({shape:'rect',width:10,height:10,layout:'grid',density:500,inset:0,pattern:'solid',color1:'#ffffff'});
+ const large=O.selectLEDModel(design,'WS2812B'),small=O.selectLEDModel(large,'WS2812C-2020');
+ const largeLayout=O.makeLEDs(large),smallLayout=O.makeLEDs(small);
+ assert.equal(largeLayout.leds.length,9);
+ assert.equal(smallLayout.leds.length,16);
+ for(const state of [large,small]){
+  const layout=O.makeLEDs(state),inside=O.shapeInfo(state).inside;
+  assert.ok(layout.leds.every(led=>inside(led.x,led.y,state.packageSize/2)));
+ }
+ // LEDピッチはテープ密度で決まる。パッケージ選択では密度を変えない。
+ assert.equal(largeLayout.pitch,2);
+ assert.equal(smallLayout.pitch,largeLayout.pitch);
+});
+
+test('The selected optical width changes the raster footprint while preserving LED output',()=>{
+ const design=O.normalize({shape:'rect',width:20,height:20,layout:'manual',manual:[[0,0,0]],pattern:'solid',color1:'#ffffff',brightness:100,mcdR:1000,mcdG:1000,mcdB:1000});
+ const states=['WS2812B','WS2812C-2020'].map(id=>O.selectLEDModel(design,id));
+ const rasters=states.map(state=>O.rasterSources(state,O.makeLEDs(state).leds,80,80,.25,.25));
+ const occupied=raster=>raster.src[0].reduce((count,v)=>count+(v>0?1:0),0);
+ assert.ok(occupied(rasters[0])>occupied(rasters[1]),'The larger window retained the previous small LED footprint');
+ for(const raster of rasters)for(const field of raster.src)close(field.reduce((sum,v)=>sum+v,0),1,1e-7);
+});
+
+test('Sequential model changes produce the same optical result as a new solver',()=>{
+ let state=O.normalize({shape:'rect',width:20,height:20,layout:'manual',manual:[[0,0,.3]],pattern:'solid',color1:'#ffffff',gap:2,thickness:1,spread:0,roi:0});
+ const reused=new O.Solver(),options={resolution:40};
+ let first=null;
+ for(const id of [...models,'WS2812B']){
+  state=O.selectLEDModel(state,id);
+  const actual=reused.solve(state,options),expected=new O.Solver().solve(state,options);
+  assert.equal(actual.state.packageSize,state.packageSize,id);
+  assert.equal(actual.state.aperture,state.aperture,id);
+  assert.deepEqual(actual.leds,expected.leds,id);
+  for(let c=0;c<3;c++)assert.deepEqual(actual.fields[c],expected.fields[c],`${id}: an earlier model remained in the source cache`);
+  if(id==='WS2812B'&&!first)first=actual;
+  if(id==='WS2812C-2020')assert.notDeepEqual(actual.fields[1],first.fields[1],'The optical result did not change after selecting a 2020 LED');
+ }
+});
+
+test('Changing only a fixed LED package does not replace its calibrated emitting width',()=>{
+ const state=O.normalize({ledModel:'custom',packageSize:5.4,aperture:1.1,shape:'rect',width:20,height:20,layout:'manual',manual:[[0,0,0]],pattern:'solid',color1:'#ffffff'});
+ const smaller=O.normalize({...state,packageSize:2.2}),solver=new O.Solver(),options={resolution:40};
+ const largeResult=solver.solve(state,options),smallResult=solver.solve(smaller,options);
+ assert.equal(smallResult.state.packageSize,2.2);
+ assert.equal(smallResult.state.aperture,1.1);
+ for(let c=0;c<3;c++)assert.deepEqual(smallResult.fields[c],largeResult.fields[c]);
+});

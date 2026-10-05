@@ -3,7 +3,7 @@
 const $=id=>document.getElementById(id), O=Optics, KEY='diffusion-lab-v1';
 let state=O.normalize(), result=null, baseline=null, worker=null, busy=false, pending=null, latest=0, timer=null, toastTimer=null;
 let sweepWorker=null,sweepResults=[],sweepKey='',sweepRun=0,sweepComplete=false;
-let map=null,selectedTape=-1,dragTape=null,drawingPath=false,pathDraft=[],lastAutoLayout={manual:[],tapeLengths:[]};
+let map=null,selectedTape=-1,tapeMode='move',dragTape=null,drawingPath=false,pathDraft=[],lastAutoLayout={manual:[],tapeLengths:[]};
 try{const saved=localStorage.getItem(KEY);if(saved)state=O.normalize(JSON.parse(saved));}catch(_){/* Private/file contexts may deny storage. */}
 let gamingWorker=null,gamingFrames=[],gamingKey='',gamingPreparing=false,gamingRun=0,gamingRAF=0,gamingLast=0,gamingOutput=null,orbit=null;
 const displayKeys=new Set(['renderMode','cameraYaw','cameraPitch','cameraZoom','gamingSpeed','view','exposure','tone','ambient','showLED','showGrid','whiteLevel','target','customLabel']);
@@ -78,6 +78,7 @@ function syncControls(){
  $('gapSlider').value=1000*Math.log(state.gap/.25)/Math.log(1200);
  $('materialPicker').value='#'+state.argb.slice(3);
  $('heatKey').style.display=state.view==='heat'?'block':'none';
+ const ledOverlay=document.querySelector('[data-key="showLED"]').parentElement;ledOverlay.lastChild.textContent=state.view==='appearance'&&state.renderMode==='3d'?'LEDテープを表示':'LED位置を重ねる';
  $('canvasLabel').textContent=state.view==='layout'?'LED LAYOUT · X → / Y ↓':state.view==='heat'?'LUMINANCE MAP · IMAGE P95 SCALE':'FRONT VIEW · PARALLEL PLANES';
  $('cameraControls').hidden=state.view!=='appearance'||state.renderMode!=='3d';
  if(state.view==='appearance'&&state.renderMode==='3d')$('canvasLabel').textContent='3D · FRONT LIGHTING ON PARALLEL PLANES';
@@ -105,7 +106,7 @@ function syncLEDSpec(){
  const p=O.ledProfiles[state.ledModel],description=O.ledDescription(state);
  const size=document.querySelector('[data-key="packageSize"]');size.readOnly=!!p;
  $('ledPresetBtn').hidden=!p;
- $('ledValueSummary').textContent=`幅：${description.widthBasis} / 角度：${description.angleBasis}`;
+ $('ledValueSummary').textContent=`外形：${p?p.packageCode+'系':'カスタム'} / 代表幅 ${format(state.packageSize,2)} mm · 幅：${description.widthBasis} / 角度：${description.angleBasis}`;
  $('ledSpecDetails').replaceChildren();
  if(!p){$('ledSpecDetails').textContent='型番未指定の手入力です。旧設定ファイルは元の幅・角度・光度を保持して読み込みます。製品に対応づける場合は型番を選び直してください。';return;}
  const lines=[p.revision+' · '+p.pages,
@@ -113,7 +114,7 @@ function syncLEDSpec(){
   `現在の計算幅：${format(state.aperture,3)} mm（${description.widthBasis}）。`,
   p.angle===null?`半値角の規格は未記載。型番選択時の初期値は比較用の全幅 ${p.assumedAngle}° です。外形・開口寸法から発光角度は算出できません。`:`型番選択時の初期値は、資料の50%光度における全幅 ${p.angle}° です。cosⁿ配光に近似します。`,
   `現在の計算角度：全幅 ${state.angle}°（${description.angleBasis}）。`,
-  `資料の外形最大辺は ${p.packageSize} mm。配置は現在の代表幅 ${state.packageSize} mm の正方形に近似します。光度は型番選択では変わりません。実際の製品に合わせて各色を入力してください。`];
+  `配置に使う資料の代表外形幅は ${p.packageSize} mm。配置は現在の代表幅 ${state.packageSize} mm の正方形に近似します。光度は型番選択では変わりません。実際の製品に合わせて各色を入力してください。`];
  for(const text of lines){const paragraph=document.createElement('p');paragraph.textContent=text;$('ledSpecDetails').appendChild(paragraph);}
  const link=document.createElement('a');link.href=p.datasheetUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='参照データシートを開く';$('ledSpecDetails').appendChild(link);
 }
@@ -121,7 +122,7 @@ function applyChange(key,value){
  cancelTapeDrag();
  const previous=state.layout;
  if(key==='layout'&&value==='manual'&&previous!=='manual'){try{lastAutoLayout=O.tapeLayout(state);Object.assign(state,structuredClone(lastAutoLayout));}catch(e){toast(e.message);return;}}
- if(key==='ledModel')state=O.selectLEDModel(state,value);
+ if(key==='ledModel'){state=O.selectLEDModel(state,value);state.showLED=true;}
  if(key==='material'&&materialPresets[value])Object.assign(state,materialPresets[value]);
  state[key]=value;
  if(key==='pattern'){state.gamingPlaying=value==='gaming';state.gamingPhase=0;}
@@ -130,7 +131,8 @@ function applyChange(key,value){
  if(key==='layout'&&value==='manual'){
   state.view='layout';
  }
- if(key==='layout')selectedTape=-1;
+ if(key==='layout'){selectedTape=-1;tapeMode='move';}
+ if(key==='view'&&value!=='layout')tapeMode='move';
  if(state.layout!=='path'||state.view!=='layout'){drawingPath=false;pathDraft=[];}
  state=O.normalize(state);persist();syncControls();
  if(displayKeys.has(key)){renderAll();return;}
@@ -198,12 +200,12 @@ function drawMain(){
  const scale=Math.min((w-120)/s.width,(h-108)/s.height),bw=s.width*scale,bh=s.height*scale;
  const m={scale,x:(w-bw)/2,y:(h-bh)/2+3,w:bw,h:bh,ox:w/2,oy:h/2+3};map={...m,state:s};drawGrid(ctx,w,h,s,m);
  if(state.view==='layout'){
-  try{ctx.fillStyle='#1b222b';if(s.shape==='svg'){for(const shape of O.svgGeometry(s).shapes){contourPath(ctx,shape.contours,m.ox,m.oy,m.scale);ctx.fill(shape.fillRule);}}else{polygonPath(ctx,s,m.ox,m.oy,m.scale);ctx.fill('evenodd');}polygonPath(ctx,s,m.ox,m.oy,m.scale);ctx.strokeStyle='#4c596b';ctx.lineWidth=1;ctx.stroke();drawLEDs(ctx,leds,s,m,false);}catch(_){return;}
+  try{ctx.fillStyle='#1b222b';if(s.shape==='svg'){for(const shape of O.svgGeometry(s).shapes){contourPath(ctx,shape.contours,m.ox,m.oy,m.scale);ctx.fill(shape.fillRule);}}else{polygonPath(ctx,s,m.ox,m.oy,m.scale);ctx.fill('evenodd');}polygonPath(ctx,s,m.ox,m.oy,m.scale);ctx.strokeStyle='#4c596b';ctx.lineWidth=1;ctx.stroke();drawLEDs(ctx,leds,s,m,false);drawRotationControl(ctx,m);}catch(_){return;}
  }else if(result){drawSurface(ctx,result,{x:m.x,y:m.y,w:m.w,h:m.h},displayOptions(state.view));if(state.showLED)drawLEDs(ctx,leds,s,m,true);}
  drawDimensions(ctx,s,m);
  if(drawingPath){ctx.strokeStyle='#71e5cf';ctx.lineWidth=2;ctx.beginPath();pathDraft.forEach((p,i)=>i?ctx.lineTo(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale):ctx.moveTo(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale));ctx.stroke();ctx.fillStyle='#71e5cf';for(const p of pathDraft){ctx.beginPath();ctx.arc(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale,4,0,Math.PI*2);ctx.fill();}}
  $('dimensionLabel').textContent=format(s.width,0)+' × '+format(s.height,0)+' mm';
- $('gridLabel').textContent=drawingPath?'クリックで点を追加 · Enterで確定':state.view==='layout'?'テープを選択 / ドラッグで全体を移動':result?format(result.dx,2)+' × '+format(result.dy,2)+' mm / 計算セル':'未校正モデル';
+ $('gridLabel').textContent=drawingPath?'クリックで点を追加 · Enterで確定':state.view==='layout'?(tapeMode==='rotate'?'ドラッグで回転 · Shiftで15°刻み':'矢印キーで移動 · ダブルクリックで回転'):result?format(result.dx,2)+' × '+format(result.dy,2)+' mm / 計算セル':'未校正モデル';
  if(result)$('heatUpper').textContent=format(result.stats.p95,1)+' cd/m²';
 }
 function drawProfile(){const {ctx,w,h}=fitCanvas($('profileCanvas'));ctx.clearRect(0,0,w,h);if(!result)return;const pr=result.stats.profile,top=17,bottom=h-24,left=43,right=w-10;let max=0;for(const p of pr)if(p)max=Math.max(max,p[0]+p[1]+p[2]);max=max||1;
@@ -259,6 +261,13 @@ function syncTapeEditor(){
  if(!tapes[selectedTape])selectedTape=-1;select.value=String(selectedTape);
  select.disabled=!tapes.length||!!dragTape||drawingPath;
  const tape=tapes[selectedTape],disabled=!tape||!!dragTape||drawingPath;
+ if(!tape||state.view!=='layout'||drawingPath)tapeMode='move';
+ $('mainCanvas').dataset.tapeMode=tapeMode;
+ $('tapeRotationMode').hidden=tapeMode!=='rotate'||state.view!=='layout';
+ $('tapeRotateModeBtn').disabled=disabled;
+ $('tapeRotateModeBtn').setAttribute('aria-pressed',String(tapeMode==='rotate'));
+ $('tapeRotationAngle').textContent=tape?format(TapeTools.rotation(O,layout,selectedTape),0)+'°':'';
+ $('tapeAngle').closest('.two').classList.toggle('rotation-active',tapeMode==='rotate');
  for(const id of ['tapeX','tapeY','applyTapePosition','tapeAngle','applyTapeAngle'])$(id).disabled=disabled;
  $('convertManual').disabled=!lastAutoLayout.manual.length||!!dragTape;$('clearManual').disabled=!state.manual.length||!!dragTape;
  $('tapeCount').value=tapes.length;$('applyTapeCount').disabled=!!dragTape||drawingPath;
@@ -267,14 +276,14 @@ function syncTapeEditor(){
  document.querySelectorAll('[data-align]').forEach(btn=>btn.disabled=!!dragTape||drawingPath||!tapes.length||($('alignScope').value==='selected'&&!tape));
  const anchor=tape?layout.manual[tape.start]:null;
  $('tapeX').value=anchor?Number(anchor[0].toFixed(3)):'';$('tapeY').value=anchor?Number(anchor[1].toFixed(3)):'';
- tapeMessage(drawingPath?'経路を確定するとテープを移動できます。':tape?`${tape.length} LEDを接続したまま移動します。`:'画面上のテープ、または上の一覧から選択してください。');
+ tapeMessage(drawingPath?'経路を確定するとテープを移動できます。':tape?`${tape.length} LEDを接続したまま${tapeMode==='rotate'?'回転':'移動'}します。`:'画面上のテープ、または上の一覧から選択してください。');
 }
 function cancelTapeDrag(){
  if(!dragTape)return;const id=dragTape.pointerId;dragTape=null;if($('mainCanvas').hasPointerCapture(id))$('mainCanvas').releasePointerCapture(id);toggleExport();
 }
-function resetTapeEditor(){cancelTapeDrag();$('tapeCountStatus').textContent='';$('tapeCount').setAttribute('aria-invalid','false');selectedTape=-1;drawingPath=false;pathDraft=[];}
-function commitTapeLayout(layout){
- cancelTapeDrag();drawingPath=false;pathDraft=[];Object.assign(state,layout,{layout:'manual',view:'layout',tapeCount:0});state=O.normalize(state);persist();syncControls();clearSweepForChange();drawMain();requestCompute(0);
+function resetTapeEditor(){cancelTapeDrag();$('tapeCountStatus').textContent='';$('tapeCount').setAttribute('aria-invalid','false');selectedTape=-1;tapeMode='move';drawingPath=false;pathDraft=[];}
+function commitTapeLayout(layout,delay=0){
+ cancelTapeDrag();drawingPath=false;pathDraft=[];Object.assign(state,layout,{layout:'manual',view:'layout',tapeCount:0});state=O.normalize(state);persist();syncControls();clearSweepForChange();drawMain();requestCompute(delay);
 }
 function applyTapePosition(){
  if(dragTape||drawingPath||state.view!=='layout')return;
@@ -282,7 +291,7 @@ function applyTapePosition(){
  if(!$('tapeX').value.trim()||!$('tapeY').value.trim()){tapeMessage('X・Yの両方に数値を入力してください。',true);return;}
  try{const moved=O.moveTape(state,layout,selectedTape,Number($('tapeX').value),Number($('tapeY').value));commitTapeLayout(moved);}catch(e){tapeMessage(e.message,true);}
 }
-$('tapeSelect').addEventListener('change',e=>{selectedTape=Number(e.target.value);syncTapeEditor();drawMain();});
+$('tapeSelect').addEventListener('change',e=>{selectedTape=Number(e.target.value);tapeMode='move';syncTapeEditor();drawMain();});
 $('applyTapePosition').addEventListener('click',applyTapePosition);
 function applyTapeCount(){
  const count=Number($('tapeCount').value),layout=editorLayout();
@@ -303,6 +312,33 @@ $('alignScope').addEventListener('change',syncTapeEditor);
 for(const btn of document.querySelectorAll('[data-align]'))btn.addEventListener('click',()=>{try{commitTapeLayout(TapeTools.align(O,state,editorLayout(),$('alignScope').value==='all'?null:[selectedTape],btn.dataset.align));}catch(e){tapeMessage(e.message,true);}});
 for(const id of ['tapeX','tapeY'])$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyTapePosition();}});
 function segmentDistance(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],t=O.clamp(((p.x-a[0])*dx+(p.y-a[1])*dy)/(dx*dx+dy*dy||1),0,1);return Math.hypot(p.x-a[0]-t*dx,p.y-a[1]-t*dy);}
+function tapeCenter(layout,index){const t=O.tapeRanges(layout)[index];if(!t)return null;const ps=layout.manual.slice(t.start,t.start+t.length);return [ps.reduce((v,p)=>v+p[0],0)/ps.length,ps.reduce((v,p)=>v+p[1],0)/ps.length];}
+function wrapAngle(degrees){return ((degrees+180)%360+360)%360-180;}
+function rotationHandle(layout){const center=tapeCenter(layout,selectedTape);if(!center||!map)return null;const angle=TapeTools.rotation(O,layout,selectedTape)*Math.PI/180,r=44/map.scale;return {center,x:center[0]+Math.cos(angle)*r,y:center[1]+Math.sin(angle)*r,r};}
+function drawRotationControl(ctx,m){
+ if(tapeMode!=='rotate'||selectedTape<0)return;const handle=rotationHandle(editorLayout());if(!handle)return;
+ const x=m.ox+handle.center[0]*m.scale,y=m.oy+handle.center[1]*m.scale,hx=m.ox+handle.x*m.scale,hy=m.oy+handle.y*m.scale;
+ ctx.save();ctx.strokeStyle='#b8a5ff';ctx.lineWidth=1.5;ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(x,y,handle.r*m.scale,0,2*Math.PI);ctx.stroke();ctx.setLineDash([]);
+ ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(hx,hy);ctx.moveTo(x-5,y);ctx.lineTo(x+5,y);ctx.moveTo(x,y-5);ctx.lineTo(x,y+5);ctx.stroke();ctx.fillStyle='#b8a5ff';ctx.beginPath();ctx.arc(hx,hy,6,0,2*Math.PI);ctx.fill();ctx.restore();
+}
+function hitTape(p,layout,includeHandle=true){
+ if(includeHandle&&tapeMode==='rotate'){const h=rotationHandle(layout);if(h&&Math.hypot(p.x-h.x,p.y-h.y)*map.scale<12)return selectedTape;}
+ const threshold=Math.max(state.packageSize/2+2,10/map.scale);let nearest=-1,best=Infinity;
+ for(const tape of O.tapeRanges(layout))for(let i=tape.start;i<tape.start+tape.length;i++){const q=layout.manual[i],d=i>tape.start?segmentDistance(p,layout.manual[i-1],q):Math.hypot(p.x-q[0],p.y-q[1]);if(d<best){nearest=tape.index;best=d;}}
+ return best<threshold?nearest:-1;
+}
+function setTapeMode(mode){cancelTapeDrag();tapeMode=selectedTape>=0&&state.view==='layout'&&!drawingPath?mode:'move';syncTapeEditor();drawMain();if(selectedTape>=0)$('mainCanvas').focus({preventScroll:true});}
+$('tapeMoveModeBtn').addEventListener('click',()=>setTapeMode('move'));
+$('tapeRotateModeBtn').addEventListener('click',()=>setTapeMode('rotate'));
+$('mainCanvas').addEventListener('dblclick',e=>{if(!map||state.view!=='layout'||drawingPath||dragTape||e.button!==0)return;const index=hitTape(mousePoint(e),editorLayout(),false);if(index<0)return;e.preventDefault();selectedTape=index;setTapeMode('rotate');});
+window.addEventListener('keydown',e=>{
+ const offsets={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]},delta=offsets[e.key];
+ if(!delta||e.defaultPrevented||e.altKey||e.metaKey||state.view!=='layout'||selectedTape<0||dragTape||drawingPath||!$('modelModal').hidden)return;
+ const target=e.target;if(target instanceof Element&&(target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="slider"],[role="spinbutton"]')))return;
+ e.preventDefault();const layout=editorLayout(),tape=O.tapeRanges(layout)[selectedTape];if(!tape)return;
+ const anchor=layout.manual[tape.start],step=e.ctrlKey?.1:e.shiftKey?10:1;
+ try{const x=Math.round((anchor[0]+delta[0]*step)*1e9)/1e9,y=Math.round((anchor[1]+delta[1]*step)*1e9)/1e9;commitTapeLayout(O.moveTape(state,layout,selectedTape,x,y),80);}catch(error){tapeMessage(error.message,true);}
+});
 function syncCamera(){for(const k of ['cameraYaw','cameraPitch','cameraZoom'])document.querySelector(`[data-key="${k}"]`).value=state[k];}
 $('resetCamera').addEventListener('click',()=>{Object.assign(state,{cameraYaw:O.defaults.cameraYaw,cameraPitch:O.defaults.cameraPitch,cameraZoom:1});syncCamera();persist();drawMain();});
 $('mainCanvas').addEventListener('pointerdown',e=>{
@@ -315,15 +351,21 @@ $('mainCanvas').addEventListener('wheel',e=>{if(state.view!=='appearance'||state
 $('mainCanvas').addEventListener('pointerdown',e=>{
  if(!map||state.view!=='layout'||!e.isPrimary||e.button!==0||dragTape)return;const p=mousePoint(e);
  if(drawingPath){try{if(!O.shapeInfo(state).inside(p.x,p.y))return;}catch(_){return;}pathDraft.push([Math.round(p.x*10)/10,Math.round(p.y*10)/10]);drawMain();return;}
- const layout=editorLayout(),threshold=Math.max(state.packageSize/2+2,10/map.scale);let nearest=-1,best=Infinity;
- for(const tape of O.tapeRanges(layout))for(let i=tape.start;i<tape.start+tape.length;i++){const q=layout.manual[i],d=i>tape.start?segmentDistance(p,layout.manual[i-1],q):Math.hypot(p.x-q[0],p.y-q[1]);if(d<best){nearest=tape.index;best=d;}}
- selectedTape=best<threshold?nearest:-1;
- if(selectedTape>=0){e.preventDefault();dragTape={pointerId:e.pointerId,index:selectedTape,start:p,original:layout,preview:layout,moved:false};$('mainCanvas').setPointerCapture(e.pointerId);toggleExport();}
+ const layout=editorLayout(),previous=selectedTape;selectedTape=hitTape(p,layout);
+ if(selectedTape!==previous)tapeMode='move';
+ if(selectedTape>=0){e.preventDefault();$('mainCanvas').focus({preventScroll:true});const center=tapeCenter(layout,selectedTape);dragTape={pointerId:e.pointerId,index:selectedTape,kind:tapeMode,start:p,center,startAngle:Math.atan2(p.y-center[1],p.x-center[0]),original:layout,preview:layout,moved:false};$('mainCanvas').setPointerCapture(e.pointerId);toggleExport();}
  syncTapeEditor();drawMain();
 });
 $('mainCanvas').addEventListener('pointermove',e=>{
  if(!dragTape||e.pointerId!==dragTape.pointerId||!map)return;const p=mousePoint(e),d=dragTape,range=O.tapeRanges(d.original)[d.index],anchor=d.original.manual[range.start];
  // 基準スナップショットから移動量を計算し、累積誤差やつかんだ瞬間のジャンプを防ぐ。
+ if(d.kind==='rotate'){
+  if(Math.hypot(p.x-d.center[0],p.y-d.center[1])*map.scale<4)return;
+  const delta=wrapAngle((Math.atan2(p.y-d.center[1],p.x-d.center[0])-d.startAngle)*180/Math.PI),step=e.shiftKey?15:1,degrees=wrapAngle(Math.round((TapeTools.rotation(O,d.original,d.index)+delta)/step)*step);
+  if(!d.moved&&Math.abs(delta)<1)return;
+  try{d.preview=TapeTools.rotate(O,state,d.original,d.index,degrees);d.moved=Math.abs(wrapAngle(degrees-TapeTools.rotation(O,d.original,d.index)))>1e-8;syncTapeEditor();drawMain();}catch(e){tapeMessage(e.message,true);}
+  return;
+ }
  const dx=Math.round((p.x-d.start.x)*10)/10,dy=Math.round((p.y-d.start.y)*10)/10;
  if(!d.moved&&Math.hypot(dx,dy)*map.scale<3)return;
  try{d.preview=O.moveTape(state,d.original,d.index,anchor[0]+dx,anchor[1]+dy);d.moved=dx!==0||dy!==0;syncTapeEditor();drawMain();}catch(e){tapeMessage(e.message,true);}

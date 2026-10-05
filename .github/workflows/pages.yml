@@ -66,6 +66,7 @@ jobs:
         run: |
           python tests/test_browser.py
           python tests/test_features.py
+          python tests/test_interactions.py
 
       - name: Upload only the built website
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

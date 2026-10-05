@@ -108,6 +108,22 @@ with LocalSite(ROOT/'dist').start() as site,sync_playwright() as p:
     check('An existing distance comparison cannot prevent gaming playback',get(page)['gamingPlaying'] and page.evaluate('DiffusionLab.getGaming().frames===24'))
     page.locator('#fileInput').set_input_files(str(ART/'features-settings.json'));wait(page)
     check('JSON import restores paused scene and 3D camera',get(page)['gamingPhase']==.62 and not get(page)['gamingPlaying'] and get(page)['renderMode']=='3d')
+    set_state(page,{'shape':'rect','width':100,'height':60,'layout':'manual','manual':[[-25,12,0],[0,12,0],[25,12,0]],'tapeLengths':[3],'view':'layout','pattern':'solid','gap':25,'quality':160,'showLED':False})
+    body_widths=[]
+    for model in ['WS2812B','WS2812B-MINI','WS2812C-2020']:
+        page.locator('[data-key="ledModel"]').select_option(model);wait(page)
+        painted=page.evaluate("""()=>{const c=document.getElementById('mainCanvas'),rect=c.getBoundingClientRect(),s=DiffusionLab.getState(),scale=Math.min((rect.width-120)/s.width,(rect.height-108)/s.height),dpr=c.width/rect.width,x=rect.width/2,y=rect.height/2+3+12*scale,ctx=c.getContext('2d'),data=ctx.getImageData(Math.round((x-20)*dpr),Math.round(y*dpr),40*dpr,1).data,positions=[];for(let i=0;i<data.length;i+=4)if(data[i]===201&&data[i+1]===198&&data[i+2]===180)positions.push(i/4);return positions.length?Math.max(...positions)-Math.min(...positions)+1:0;}""")
+        body_widths.append(painted)
+        check('LED model '+model+' enables dimensions and reaches both geometry and optics',get(page)['showLED'] and page.locator('[data-key="showLED"]').is_checked() and page.evaluate('DiffusionLab.getResult().state.packageSize===Optics.ledProfiles[DiffusionLab.getState().ledModel].packageSize'))
+    check('5050, 3535 and 2020 footprints visibly differ in the layout canvas',body_widths[0]>body_widths[1]>body_widths[2]>0)
+    set_state(page,{'view':'appearance','renderMode':'3d','cameraPitch':78,'showLED':False})
+    images=[]
+    for model in ['WS2812B','WS2812B-MINI','WS2812C-2020']:
+        page.locator('[data-key="ledModel"]').select_option(model);wait(page)
+        images.append(page.locator('#mainCanvas').evaluate('(c)=>c.toDataURL()'))
+        check('3D model '+model+' uses its own mounted package footprint',page.evaluate("""()=>{const r=DiffusionLab.getResult(),g=DiffusionView3D.mountedTapeGeometry(r),p=g.packages[0];return Math.abs(p.polygon[1][0]-p.polygon[0][0]-r.state.packageSize)<1e-9 && g.layers.tapeBottom===g.layers.baseTop && g.layers.packageBottom===g.layers.tapeTop && DiffusionLab.getState().showLED;}"""))
+    check('3D canvas refreshes across all three LED package sizes',len(set(images))==3)
+    page.screenshot(path=str(ART/'features-mounted-tapes.png'),full_page=True)
     page.set_viewport_size({'width':390,'height':844});page.wait_for_timeout(150)
     check('3D camera toolbar fits a mobile viewport',page.evaluate('document.documentElement.scrollWidth<=390') and page.locator('#cameraControls').is_visible())
     page.screenshot(path=str(ART/'features-mobile.png'),full_page=True)
