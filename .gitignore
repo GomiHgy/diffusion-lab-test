@@ -1,0 +1,14 @@
+# Generated deployment payload and local test artifacts
+/dist/
+/tests/artifacts/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

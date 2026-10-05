@@ -1,0 +1,199 @@
+/* Diffusion Lab v1.0 — original planar RGB/photometric approximation.
+ * No third-party runtime dependencies. See MODEL.md for assumptions. */
+(function (root) {
+'use strict';
+const PI=Math.PI, Y=[0.2126,0.7152,0.0722];
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const defaults={
+ version:1,shape:'rounded',width:160,height:72,radius:10,hole:0.46,
+ polygon:'50,2\n88,16\n98,50\n75,94\n25,94\n2,50\n12,16',
+ layout:'rows',density:60,rowSpacing:24,inset:8,rotation:0,
+ path:'-65,18\n-65,-18\n0,-18\n0,18\n65,18\n65,-18',manual:[],
+ package:'5050',packageSize:5,aperture:2.8,splitRGB:false,angle:120,
+ mcdR:213,mcdG:715,mcdB:72,brightness:20,
+ pattern:'gradient',color1:'#00cfff',color2:'#ff3979',pwmMode:'raw',
+ gap:10,material:'opal',argb:'#FFFFFFFF',thickness:3,
+ transmission:45,diffuse:100,spread:0.65,
+ quality:288,roi:5,exposure:0,whiteLevel:1000,tone:'compress',ambient:0,
+ showLED:false,showGrid:true,view:'appearance',target:80,
+ customLabel:'未校正・比較用の仮定値'
+};
+const ENUMS={shape:['rect','rounded','ellipse','ring','polygon'],layout:['rows','grid','perimeter','ring','path','manual'],package:['5050','3535','2020','custom'],pattern:['solid','gradient','alternating','rainbow','rgb'],pwmMode:['raw','srgb'],material:['opal','strong','frost','clear','foam','custom'],tone:['compress','linear'],view:['appearance','heat','layout']};
+const RANGES={width:[10,2000],height:[10,2000],radius:[0,1000],hole:[0.05,0.95],density:[1,1000],rowSpacing:[1,1000],inset:[0,1000],rotation:[-180,180],packageSize:[0.5,20],aperture:[0.05,20],angle:[10,175],mcdR:[0,200000],mcdG:[0,200000],mcdB:[0,200000],brightness:[0,100],gap:[0.25,300],thickness:[0.1,30],transmission:[0,100],diffuse:[0,100],spread:[0,5],roi:[0,500],exposure:[-6,6],whiteLevel:[1,1000000],ambient:[0,10000],target:[0,100]};
+function normalize(input={}) {
+ const s={...defaults};
+ for(const k in defaults) if(Object.prototype.hasOwnProperty.call(input,k)) s[k]=input[k];
+ for(const k in RANGES){const v=Number(s[k]);s[k]=Number.isFinite(v)?clamp(v,...RANGES[k]):defaults[k];}
+ for(const k in ENUMS)if(!ENUMS[k].includes(s[k]))s[k]=defaults[k];
+ s.quality=[160,288,448].includes(Number(s.quality))?Number(s.quality):288;
+ for(const k of ['splitRGB','showLED','showGrid'])s[k]=s[k]===true;
+ for(const k of ['color1','color2'])if(typeof s[k]!=='string'||!/^#[0-9a-f]{6}$/i.test(s[k]))s[k]=defaults[k];
+ if(typeof s.argb!=='string'||!/^#[0-9a-f]{8}$/i.test(s.argb))s.argb=defaults.argb;
+ s.argb=s.argb.toUpperCase();
+ s.polygon=typeof s.polygon==='string'?s.polygon.slice(0,30000):defaults.polygon;
+ s.path=typeof s.path==='string'?s.path.slice(0,30000):defaults.path;
+ s.customLabel=typeof s.customLabel==='string'?s.customLabel.slice(0,200):defaults.customLabel;
+ s.manual=Array.isArray(s.manual)?s.manual.slice(0,5000).filter(p=>Array.isArray(p)&&p.length>=2&&Number.isFinite(+p[0])&&Number.isFinite(+p[1])).map(p=>[clamp(+p[0],-s.width/2,s.width/2),clamp(+p[1],-s.height/2,s.height/2),Number.isFinite(+p[2])?+p[2]:0]):[];
+ s.radius=Math.min(s.radius,s.width/2,s.height/2);
+ s.aperture=Math.min(s.aperture,s.packageSize);
+ s.version=1;return s;
+}
+function parsePoints(text,percent=false,s=defaults){
+ const out=[];
+ for(const line of text.trim().split(/[\n;]+/)){
+  if(!line.trim())continue;
+  const a=line.trim().split(/[,\s]+/).map(Number);
+  if(a.length!==2||!a.every(Number.isFinite))throw Error('座標は1行につき x,y の2つの数値で入力してください。');
+  if(percent&&(a[0]<0||a[0]>100||a[1]<0||a[1]>100))throw Error('輪郭の座標は0〜100%の範囲にしてください。');
+  out.push(percent?[(a[0]/100-.5)*s.width,(a[1]/100-.5)*s.height]:a);
+ }
+ return out;
+}
+function pointInPoly(x,y,p){let v=false;for(let i=0,j=p.length-1;i<p.length;j=i++)if(((p[i][1]>y)!==(p[j][1]>y))&&x<(p[j][0]-p[i][0])*(y-p[i][1])/(p[j][1]-p[i][1])+p[i][0])v=!v;return v;}
+function segDist(x,y,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],t=clamp(((x-a[0])*dx+(y-a[1])*dy)/(dx*dx+dy*dy||1),0,1);return Math.hypot(x-a[0]-t*dx,y-a[1]-t*dy);}
+function shapeInfo(s){
+ let poly=[];if(s.shape==='polygon'){poly=parsePoints(s.polygon,true,s);if(poly.length<3)throw Error('輪郭には3点以上が必要です。');let area=0;poly.forEach((p,i)=>{let q=poly[(i+1)%poly.length];area+=p[0]*q[1]-q[0]*p[1];});if(Math.abs(area)<.01)throw Error('輪郭の面積がありません。');}
+ const a=s.width/2,b=s.height/2;
+ function inside(x,y,margin=0){
+  if(s.shape==='rect')return Math.abs(x)<=a-margin&&Math.abs(y)<=b-margin;
+  if(s.shape==='rounded'){
+   const r=s.radius,qx=Math.abs(x)-(a-r),qy=Math.abs(y)-(b-r);
+   return Math.hypot(Math.max(qx,0),Math.max(qy,0))+Math.min(Math.max(qx,qy),0)-r<=-margin;
+  }
+  if(s.shape==='ellipse'||s.shape==='ring'){
+   if(a<=margin||b<=margin)return false;
+   const outer=(x/(a-margin))**2+(y/(b-margin))**2<=1;
+   return outer&&(s.shape!=='ring'||(x/(a*s.hole+margin))**2+(y/(b*s.hole+margin))**2>=1);
+  }
+  if(!pointInPoly(x,y,poly))return false;
+  if(margin>0)for(let i=0;i<poly.length;i++)if(segDist(x,y,poly[i],poly[(i+1)%poly.length])<margin)return false;
+  return true;
+ }
+ return {inside,poly};
+}
+function outline(s,n=120){
+ const p=[];if(s.shape==='polygon')return parsePoints(s.polygon,true,s);
+ if(s.shape==='ellipse'||s.shape==='ring'){for(let i=0;i<n;i++){let a=2*PI*i/n;p.push([s.width/2*Math.cos(a),s.height/2*Math.sin(a)]);}return p;}
+ if(s.shape==='rect')return [[-s.width/2,-s.height/2],[s.width/2,-s.height/2],[s.width/2,s.height/2],[-s.width/2,s.height/2]];
+ const r=s.radius;for(let c=0;c<4;c++){let cx=(c===0||c===3?1:-1)*(s.width/2-r),cy=(c<2?1:-1)*(s.height/2-r);for(let k=0;k<=12;k++){let t=c*PI/2+k/12*PI/2;p.push([cx+r*Math.cos(t),cy+r*Math.sin(t)]);}}return p;
+}
+function color(hex){return [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255);}
+function srgbToLinear(v){return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}
+function linearToSrgb(v){v=Math.max(0,v);return v<=.0031308?12.92*v:1.055*v**(1/2.4)-.055;}
+function hsv(h){h=((h%1)+1)%1;const i=Math.floor(h*6),f=h*6-i;return [[1,f,0],[1-f,1,0],[0,1,f],[0,1-f,1],[f,0,1],[1,0,1-f]][i%6];}
+function ledColors(s,n){const a=color(s.color1),b=color(s.color2),out=[];for(let i=0;i<n;i++){let t=n>1?i/(n-1):0,c;
+ if(s.pattern==='gradient')c=a.map((v,k)=>v*(1-t)+b[k]*t);
+ else if(s.pattern==='alternating')c=i%2?b:a;
+ else if(s.pattern==='rainbow')c=hsv(t*.85);
+ else if(s.pattern==='rgb')c=[[1,0,0],[0,1,0],[0,0,1]][i%3];
+ else c=a;
+ out.push(c.map(v=>(s.pwmMode==='srgb'?srgbToLinear(v):v)*s.brightness/100));}return out;}
+function samplePath(p,pitch,closed=false){
+ if(p.length<2)return [];
+ let segs=[],total=0;for(let i=1;i<p.length+(closed?1:0);i++){const a=p[i-1],b=p[i%p.length],l=Math.hypot(b[0]-a[0],b[1]-a[1]);if(l>1e-8){segs.push({a,b,l,start:total});total+=l;}}
+ const n=Math.floor(total/pitch)+(closed?0:1);if(n>5000)throw Error('LED数が5,000個を超えます。密度を下げるか形状を小さくしてください。');
+ const out=[],offset=closed?0:(total-(n-1)*pitch)/2;let j=0;
+ for(let i=0;i<n;i++){let d=offset+i*pitch;while(j<segs.length-1&&d>segs[j].start+segs[j].l)j++;const q=segs[j],t=clamp((d-q.start)/q.l,0,1);out.push([q.a[0]+(q.b[0]-q.a[0])*t,q.a[1]+(q.b[1]-q.a[1])*t,Math.atan2(q.b[1]-q.a[1],q.b[0]-q.a[0])]);}return out;
+}
+function makeLEDs(s){
+ const {inside}=shapeInfo(s),pitch=1000/s.density,margin=Math.max(s.inset,s.packageSize/2),rot=s.rotation*PI/180;let list=[];
+ if(s.layout==='manual')list=s.manual.map(p=>[p[0],p[1],p[2]||0]);
+ else if(s.layout==='path')list=samplePath(parsePoints(s.path),pitch);
+ else if(s.layout==='ring'){
+  const a=s.width/2-margin,b=s.height/2-margin;if(a>0&&b>0){let p=[];for(let i=0;i<720;i++){let t=2*PI*i/720;p.push([a*Math.cos(t),b*Math.sin(t)]);}list=samplePath(p,pitch,true);}
+ }else if(s.layout==='perimeter'){
+  const w=s.width-2*margin,h=s.height-2*margin;if(w>0&&h>0)list=samplePath(outline({...s,width:w,height:h,radius:Math.max(0,s.radius-margin)}),pitch,true);
+ }else{
+  const spacing=s.layout==='grid'?pitch:s.rowSpacing;
+  const extent=Math.hypot(s.width,s.height)/2;
+  if(Math.ceil(2*extent/pitch)*Math.ceil(2*extent/spacing)>90000)throw Error('配置候補が多すぎます。LED密度を下げてください。');
+  const ny=Math.max(1,Math.floor((s.height-2*margin)/spacing)+1),nx=Math.max(1,Math.floor((s.width-2*margin)/pitch)+1);
+  if(nx*ny>15000)throw Error('LED数が多すぎます。密度または列間隔を調整してください。');
+  for(let j=0;j<ny;j++){const row=[];for(let i=0;i<nx;i++){let x=(i-(nx-1)/2)*pitch,y=(j-(ny-1)/2)*spacing;row.push([x*Math.cos(rot)-y*Math.sin(rot),x*Math.sin(rot)+y*Math.cos(rot),rot]);}if(j%2)row.reverse();list.push(...row);}
+ }
+ const raw=list.length;list=list.filter(p=>inside(p[0],p[1],s.layout==='manual'?0:s.packageSize/2));
+ if(list.length>5000)throw Error('LED数が5,000個を超えます。密度を下げてください。');
+ const cols=ledColors(s,list.length);
+ return {leds:list.map((p,i)=>({x:p[0],y:p[1],angle:p[2]||0,rgb:cols[i],index:i})),discarded:raw-list.length,pitch};
+}
+const planCache=new Map();
+function plan(n){if(planCache.has(n))return planCache.get(n);const rev=new Uint32Array(n),cs=new Float64Array(n/2),sn=new Float64Array(n/2);for(let i=1,j=0;i<n;i++){let bit=n>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;rev[i]=j;}for(let i=0;i<n/2;i++){cs[i]=Math.cos(-2*PI*i/n);sn[i]=Math.sin(-2*PI*i/n);}const p={rev,cs,sn};planCache.set(n,p);return p;}
+function fftLine(re,im,start,stride,n,inverse){const p=plan(n);for(let i=1;i<n;i++){let j=p.rev[i];if(i<j){let a=start+i*stride,b=start+j*stride,t=re[a];re[a]=re[b];re[b]=t;t=im[a];im[a]=im[b];im[b]=t;}}
+ for(let size=2;size<=n;size*=2){const half=size/2,step=n/size;for(let j=0;j<half;j++){let cr=p.cs[j*step],ci=p.sn[j*step]*(inverse?-1:1);for(let i=j;i<n;i+=size){const a=start+i*stride,b=a+half*stride,tr=cr*re[b]-ci*im[b],ti=cr*im[b]+ci*re[b],ar=re[a],ai=im[a];re[a]=ar+tr;im[a]=ai+ti;re[b]=ar-tr;im[b]=ai-ti;}}}
+ if(inverse)for(let i=0,a=start;i<n;i++,a+=stride){re[a]/=n;im[a]/=n;}
+}
+function fft2(re,im,w,h,inverse=false){for(let y=0;y<h;y++)fftLine(re,im,y*w,1,w,inverse);for(let x=0;x<w;x++)fftLine(re,im,x,w,h,inverse);}
+const pow2=n=>2**Math.ceil(Math.log2(n));
+function kernelValue(dx,dy,gap,m){const r2=dx*dx+dy*dy+gap*gap;return 1e6/r2*Math.pow(gap/Math.sqrt(r2),m+1);}
+function makeKernel(nx,ny,dx,dy,gap,angle){const w=pow2(2*nx),h=pow2(2*ny),re=new Float32Array(w*h),im=new Float32Array(w*h);const m=-Math.log(2)/Math.log(Math.cos(angle*PI/360));
+ for(let y=0;y<h;y++){let yy=(y<=h/2?y:y-h)*dy;for(let x=0;x<w;x++){let xx=(x<=w/2?x:x-w)*dx;re[y*w+x]=kernelValue(xx,yy,gap,m);}}
+ fft2(re,im,w,h);return {re,im,w,h,m};}
+function splat(a,w,nx,ny,x,y,v){const x0=Math.floor(x),y0=Math.floor(y),fx=x-x0,fy=y-y0;for(let j=0;j<2;j++)for(let i=0;i<2;i++){let xx=x0+i,yy=y0+j;if(xx>=0&&xx<nx&&yy>=0&&yy<ny)a[yy*w+xx]+=v*(i?fx:1-fx)*(j?fy:1-fy);}}
+function rasterSources(s,leds,nx,ny,dx,dy){const w=pow2(2*nx),h=pow2(2*ny),src=[0,1,2].map(()=>new Float32Array(w*h)),mcd=[s.mcdR,s.mcdG,s.mcdB],chOff=[[-.23,-.14],[.23,-.14],[0,.24]];
+ const aperture=s.aperture*(s.splitRGB?.43:1),samples=clamp(Math.ceil(aperture/Math.min(dx,dy)*2),3,24);
+ for(const led of leds){const ca=Math.cos(led.angle),sa=Math.sin(led.angle);for(let c=0;c<3;c++){const I=mcd[c]*.001*led.rgb[c];if(!I)continue;let ox=s.splitRGB?chOff[c][0]*s.aperture:0,oy=s.splitRGB?chOff[c][1]*s.aperture:0;
+  for(let j=0;j<samples;j++)for(let i=0;i<samples;i++){const lx=((i+.5)/samples-.5)*aperture+ox,ly=((j+.5)/samples-.5)*aperture+oy;const x=(led.x+lx*ca-ly*sa+s.width/2)/dx-.5,y=(led.y+lx*sa+ly*ca+s.height/2)/dy-.5;splat(src[c],w,nx,ny,x,y,I/(samples*samples));}
+ }}return {src,w,h,samples};}
+function gaussianBlur(a,nx,ny,sigmaX,sigmaY){
+ let out=a;
+ function pass(inp,n,sigma,horizontal){if(sigma<.15)return inp;const r=Math.min(Math.ceil(sigma*3),Math.max(nx,ny)*3),weights=new Float64Array(2*r+1);let sum=0;for(let i=-r;i<=r;i++){weights[i+r]=Math.exp(-.5*(i/sigma)**2);sum+=weights[i+r];}for(let i=0;i<weights.length;i++)weights[i]/=sum;const dst=new Float32Array(nx*ny);
+ for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){let v=0;const lo=Math.max(-r,horizontal?-x:-y),hi=Math.min(r,horizontal?nx-1-x:ny-1-y);for(let k=lo;k<=hi;k++)v+=inp[(horizontal?y:y+k)*nx+(horizontal?x+k:x)]*weights[k+r];dst[y*nx+x]=v;}return dst;}
+ out=pass(out,nx,sigmaX,true);out=pass(out,ny,sigmaY,false);return out;
+}
+function getFilter(argb){const alpha=parseInt(argb.slice(1,3),16)/255,c=color('#'+argb.slice(3));return c.map(v=>(1-alpha)+alpha*srgbToLinear(v));}
+function statistics(fields,mask,roiMask,nx,ny,dx,dy){const values=[],all=[];let min=Infinity,max=0,sum=0,sq=0;for(let i=0;i<mask.length;i++)if(mask[i]){let v=Math.max(0,fields[0][i]+fields[1][i]+fields[2][i]);all.push(v);if(roiMask[i])values.push(v);}
+ const validROI=values.length>0;if(!validROI)for(const v of all)values.push(v);values.sort((a,b)=>a-b);for(const v of values){min=Math.min(min,v);max=Math.max(max,v);sum+=v;sq+=v*v;}
+ const n=values.length,mean=n?sum/n:0,p5=n?values[Math.floor((n-1)*.05)]:0,p95=n?values[Math.floor((n-1)*.95)]:0;
+ const profile=[];const row=Math.floor(ny/2);for(let x=0;x<nx;x++){let i=row*nx+x;profile.push(mask[i]?fields.map(c=>c[i]):null);}
+ return {mean,min:n?min:0,max,p5,p95,robust:p95>1e-9?p5/p95:null,u0:mean>1e-9?min/mean:null,cv:mean>1e-9?Math.sqrt(Math.max(0,sq/n-mean*mean))/mean:null,n,validROI,area:all.length*dx*dy,profile};}
+class Solver {
+ constructor(){this.cache=null;this.kernel=null;}
+ solve(input,options={}){
+  const start=Date.now(),s=normalize(input),geo=makeLEDs(s),{leds}=geo,info=shapeInfo(s);
+  const res=options.resolution||s.quality,step=Math.max(s.width,s.height)/res,nx=Math.max(16,Math.round(s.width/step)),ny=Math.max(16,Math.round(s.height/step)),dx=s.width/nx,dy=s.height/ny;
+  const sourceKey=JSON.stringify([nx,ny,s.width,s.height,s.aperture,s.splitRGB,s.mcdR,s.mcdG,s.mcdB,leds]);
+  let cache=this.cache;
+  if(!cache||cache.key!==sourceKey){const ras=rasterSources(s,leds,nx,ny,dx,dy);const trans=ras.src.map(src=>{let re=new Float32Array(src),im=new Float32Array(src.length);fft2(re,im,ras.w,ras.h);return {re,im};});cache={key:sourceKey,...ras,trans};this.cache=cache;}
+  const kk=JSON.stringify([nx,ny,dx,dy,s.gap,s.angle]);
+  if(!this.kernel||this.kernel.key!==kk)this.kernel={key:kk,...makeKernel(nx,ny,dx,dy,s.gap,s.angle)};
+  const ker=this.kernel,mask=new Uint8Array(nx*ny),roiMask=new Uint8Array(nx*ny);
+  for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){let xx=(x+.5)*dx-s.width/2,yy=(y+.5)*dy-s.height/2,i=y*nx+x;mask[i]=info.inside(xx,yy)?1:0;roiMask[i]=info.inside(xx,yy,s.roi)?1:0;}
+  const filter=getFilter(s.argb),tau=s.transmission/100,haze=s.diffuse/100,sigma=s.thickness*s.spread;
+  const fields=[],irradiance=[];
+  for(let c=0;c<3;c++){
+   const re=new Float32Array(ker.re.length),im=new Float32Array(re.length),t=cache.trans[c];
+   for(let i=0;i<re.length;i++){re[i]=t.re[i]*ker.re[i]-t.im[i]*ker.im[i];im[i]=t.re[i]*ker.im[i]+t.im[i]*ker.re[i];}
+   fft2(re,im,ker.w,ker.h,true);const E=new Float32Array(nx*ny);
+   for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){let i=y*nx+x;E[i]=mask[i]?Math.max(0,re[y*ker.w+x]):0;}
+   irradiance.push(E);
+   const blurred=gaussianBlur(E,nx,ny,sigma/dx,sigma/dy),L=new Float32Array(nx*ny);
+   for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){const i=y*nx+x;if(mask[i]){const direct=cache.src[c][y*ker.w+x]*1e6/(dx*dy);L[i]=tau*filter[c]*(haze*blurred[i]/PI+(1-haze)*direct);}}
+   fields.push(L);
+  }
+  const stats=statistics(fields,mask,roiMask,nx,ny,dx,dy),warnings=[];
+  if(!stats.validROI)roiMask.set(mask);
+  if(!leds.length)warnings.push('LEDがありません。配置条件を調整するか、自由配置でLEDを追加してください。');
+  if(geo.discarded)warnings.push(`輪郭外または端に近いLED候補 ${geo.discarded} 個を除外しました。`);
+  if(Math.max(dx,dy)>s.gap/2)warnings.push('距離に対して計算格子が粗い条件です。高精細にするか、形状を小さくして再確認してください。');
+  if(s.diffuse<99&&Math.max(dx,dy)>s.aperture/2)warnings.push('直接透過するLED像は格子解像度の影響を受けます。高精細で確認してください。');
+  if(!stats.validROI)warnings.push('指定した端の除外幅では評価領域が残らないため、全面で集計しました。');
+  if(s.diffuse<95)warnings.push('低拡散材の見え方は簡易的な正面直視モデルです。屈折・視差・レンズ像は再現しません。');
+  if(s.shape==='ring'||s.shape==='ellipse')warnings.push('楕円輪郭の評価領域は、長短半径を除外幅だけ縮小・拡大した近似です。');
+  return {state:s,nx,ny,dx,dy,fields,irradiance,mask,roiMask,stats,leds,pitch:geo.pitch,warnings,ms:Date.now()-start};
+ }
+}
+function rgba(result,display={}){
+ const s={...result.state,...display},n=result.nx*result.ny,out=new Uint8ClampedArray(n*4),filter=getFilter(s.argb),ex=Math.pow(2,s.exposure)/s.whiteLevel;
+ const scale=s.heatMax||result.stats.p95||1;
+ for(let i=0;i<n;i++){
+  if(!result.mask[i])continue;
+  const L=result.fields.map((f,c)=>f[i]+s.ambient*filter[c]*Y[c]/PI),lum=L[0]+L[1]+L[2];let rgb;
+  if(s.view==='heat'){
+   const v=clamp(lum/scale,0,1),stops=[[.04,.04,.15],[.10,.14,.46],[.0,.65,.68],[.75,.87,.25],[1,.33,.12]],p=v*4,j=Math.min(3,Math.floor(p)),t=p-j;rgb=stops[j].map((v,c)=>v*(1-t)+stops[j+1][c]*t);
+  }else{rgb=L.map((v,c)=>{let x=Math.max(0,v/Y[c]*ex);return linearToSrgb(s.tone==='compress'?1-Math.exp(-x):Math.min(1,x));});}
+  for(let c=0;c<3;c++)out[i*4+c]=clamp(rgb[c]*255,0,255);out[i*4+3]=255;
+ }return out;
+}
+const api={defaults,normalize,shapeInfo,outline,parsePoints,makeLEDs,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
+root.Optics=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+})(typeof self!=='undefined'?self:globalThis);

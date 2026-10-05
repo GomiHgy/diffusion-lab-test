@@ -1,0 +1,17 @@
+test_all_sources_are_embedded_without_modification (test_build.BuildTests.test_all_sources_are_embedded_without_modification) ... ok
+test_bundle_matches_sources (test_build.BuildTests.test_bundle_matches_sources) ... ok
+test_closing_script_in_source_is_rejected (test_build.BuildTests.test_closing_script_in_source_is_rejected) ... ok
+test_development_files_are_not_in_public_payload (test_build.BuildTests.test_development_files_are_not_in_public_payload) ... ok
+test_http_root_and_repository_path_have_identical_payloads (test_build.BuildTests.test_http_root_and_repository_path_have_identical_payloads) ... ok
+test_http_sample_from_repository_path (test_build.BuildTests.test_http_sample_from_repository_path) ... ok
+test_missing_placeholder_is_rejected (test_build.BuildTests.test_missing_placeholder_is_rejected) ... ok
+test_no_automatic_external_resources_or_root_relative_links (test_build.BuildTests.test_no_automatic_external_resources_or_root_relative_links) ... ok
+test_payload_contains_only_allowlisted_files (test_build.BuildTests.test_payload_contains_only_allowlisted_files) ... ok
+test_rebuild_removes_stale_files_and_check_does_not_write (test_build.BuildTests.test_rebuild_removes_stale_files_and_check_does_not_write) ... ok
+test_render_is_deterministic (test_build.BuildTests.test_render_is_deterministic) ... ok
+test_samples_are_valid_version_one_settings (test_build.BuildTests.test_samples_are_valid_version_one_settings) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 1.556s
+
+OK

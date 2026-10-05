@@ -1,0 +1,3 @@
+# Only needed for browser tests. The app and build have no third-party dependencies.
+# Pinned to the version used for the bundled validation, not claimed to be latest.
+playwright==1.57.0

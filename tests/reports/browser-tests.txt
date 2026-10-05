@@ -1,0 +1,41 @@
+PASS 1 Initial scene produces a positive result
+PASS 2 Numeric typing preserves all digits
+PASS 3 Package changes aperture, not reference light intensity
+PASS 4 Transmission slider/number reaches zero output
+PASS 5 ARGB UI applies channel filtering
+PASS 6 Shape: rect
+PASS 7 Shape: rounded
+PASS 8 Shape: ellipse
+PASS 9 Shape: ring
+PASS 10 Shape: polygon
+PASS 11 LED layout: rows
+PASS 12 LED layout: grid
+PASS 13 LED layout: perimeter
+PASS 14 LED layout: ring
+PASS 15 LED layout: path
+PASS 16 Canvas click adds a manual LED
+PASS 17 Shift-click removes a manual LED
+PASS 18 Settings JSON import
+PASS 19 Invalid geometry import does not mutate current state
+PASS 20 Export: test-settings.json
+PASS 21 Export: test-grid.csv
+PASS 22 Export: test-preview.png
+PASS 23 Exported settings are complete and parseable
+PASS 24 CSV contains physical field values
+PASS 25 Baseline retained while current gap changes
+PASS 26 Six-distance sweep completes
+PASS 27 Changing distance preserves sweep
+PASS 28 Changing optical design invalidates sweep
+PASS 29 Rapid updates render newest request only
+PASS 30 Model help dialog opens
+PASS 31 Escape closes help dialog
+PASS 32 In-app numerical self tests pass
+PASS 33 No JavaScript runtime errors
+PASS 34 No external network requests
+PASS 35 Mobile has no horizontal overflow
+PASS 36 Mobile controls are accessible
+PASS 37 No mobile JavaScript runtime errors
+PASS 38 Standalone payload calculates
+PASS 39 Calculation works with network disabled after load
+PASS 40 No additional JavaScript runtime errors
+40/40 browser checks passed. Runtime errors: []

@@ -1,0 +1,173 @@
+{
+  "tests": [
+    {
+      "test": "Initial scene produces a positive result",
+      "passed": true
+    },
+    {
+      "test": "Numeric typing preserves all digits",
+      "passed": true
+    },
+    {
+      "test": "Package changes aperture, not reference light intensity",
+      "passed": true
+    },
+    {
+      "test": "Transmission slider/number reaches zero output",
+      "passed": true
+    },
+    {
+      "test": "ARGB UI applies channel filtering",
+      "passed": true
+    },
+    {
+      "test": "Shape: rect",
+      "passed": true
+    },
+    {
+      "test": "Shape: rounded",
+      "passed": true
+    },
+    {
+      "test": "Shape: ellipse",
+      "passed": true
+    },
+    {
+      "test": "Shape: ring",
+      "passed": true
+    },
+    {
+      "test": "Shape: polygon",
+      "passed": true
+    },
+    {
+      "test": "LED layout: rows",
+      "passed": true
+    },
+    {
+      "test": "LED layout: grid",
+      "passed": true
+    },
+    {
+      "test": "LED layout: perimeter",
+      "passed": true
+    },
+    {
+      "test": "LED layout: ring",
+      "passed": true
+    },
+    {
+      "test": "LED layout: path",
+      "passed": true
+    },
+    {
+      "test": "Canvas click adds a manual LED",
+      "passed": true
+    },
+    {
+      "test": "Shift-click removes a manual LED",
+      "passed": true
+    },
+    {
+      "test": "Settings JSON import",
+      "passed": true
+    },
+    {
+      "test": "Invalid geometry import does not mutate current state",
+      "passed": true
+    },
+    {
+      "test": "Export: test-settings.json",
+      "passed": true
+    },
+    {
+      "test": "Export: test-grid.csv",
+      "passed": true
+    },
+    {
+      "test": "Export: test-preview.png",
+      "passed": true
+    },
+    {
+      "test": "Exported settings are complete and parseable",
+      "passed": true
+    },
+    {
+      "test": "CSV contains physical field values",
+      "passed": true
+    },
+    {
+      "test": "Baseline retained while current gap changes",
+      "passed": true
+    },
+    {
+      "test": "Six-distance sweep completes",
+      "passed": true
+    },
+    {
+      "test": "Changing distance preserves sweep",
+      "passed": true
+    },
+    {
+      "test": "Changing optical design invalidates sweep",
+      "passed": true
+    },
+    {
+      "test": "Rapid updates render newest request only",
+      "passed": true
+    },
+    {
+      "test": "Model help dialog opens",
+      "passed": true
+    },
+    {
+      "test": "Escape closes help dialog",
+      "passed": true
+    },
+    {
+      "test": "In-app numerical self tests pass",
+      "passed": true
+    },
+    {
+      "test": "No JavaScript runtime errors",
+      "passed": true
+    },
+    {
+      "test": "No external network requests",
+      "passed": true
+    },
+    {
+      "test": "Mobile has no horizontal overflow",
+      "passed": true
+    },
+    {
+      "test": "Mobile controls are accessible",
+      "passed": true
+    },
+    {
+      "test": "No mobile JavaScript runtime errors",
+      "passed": true
+    },
+    {
+      "test": "Standalone payload calculates",
+      "passed": true
+    },
+    {
+      "test": "Calculation works with network disabled after load",
+      "passed": true
+    },
+    {
+      "test": "No additional JavaScript runtime errors",
+      "passed": true
+    }
+  ],
+  "runtime_errors": [],
+  "network_requests": [
+    "blob:null/db7b8a79-146f-43f3-a3de-7dd05816b81f",
+    "blob:null/027e308e-f362-4011-93dc-51888afa12e5",
+    "blob:null/fe1650a9-9c70-416b-b0be-4777081b5c28"
+  ],
+  "mode": "embedded (HTTP navigation not tested)",
+  "browser_version": "144.0.7559.96",
+  "site_url": null
+}

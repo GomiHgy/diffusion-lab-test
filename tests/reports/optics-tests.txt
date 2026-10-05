@@ -1,0 +1,160 @@
+TAP version 13
+# Subtest: FFT forward/inverse round trip
+ok 1 - FFT forward/inverse round trip
+  ---
+  duration_ms: 5.018355
+  type: 'test'
+  ...
+# Subtest: Kernel inverse square on axis
+ok 2 - Kernel inverse square on axis
+  ---
+  duration_ms: 0.196671
+  type: 'test'
+  ...
+# Subtest: Lambertian off-axis geometry includes both cosines
+ok 3 - Lambertian off-axis geometry includes both cosines
+  ---
+  duration_ms: 0.227197
+  type: 'test'
+  ...
+# Subtest: Angular exponent matches half-maximum convention
+ok 4 - Angular exponent matches half-maximum convention
+  ---
+  duration_ms: 0.143294
+  type: 'test'
+  ...
+# Subtest: FFT convolution matches direct sum, with no wraparound
+ok 5 - FFT convolution matches direct sum, with no wraparound
+  ---
+  duration_ms: 14.471206
+  type: 'test'
+  ...
+# Subtest: Finite emitter deposition conserves per-channel normal intensity
+ok 6 - Finite emitter deposition conserves per-channel normal intensity
+  ---
+  duration_ms: 8.646113
+  type: 'test'
+  ...
+# Subtest: Separated RGB apertures conserve normal intensity
+ok 7 - Separated RGB apertures conserve normal intensity
+  ---
+  duration_ms: 6.145019
+  type: 'test'
+  ...
+# Subtest: sRGB round trip
+ok 8 - sRGB round trip
+  ---
+  duration_ms: 0.218986
+  type: 'test'
+  ...
+# Subtest: ARGB alpha is tint strength, not optical throughput
+ok 9 - ARGB alpha is tint strength, not optical throughput
+  ---
+  duration_ms: 1.650371
+  type: 'test'
+  ...
+# Subtest: Zero transmission produces exactly zero emitted luminance
+ok 10 - Zero transmission produces exactly zero emitted luminance
+  ---
+  duration_ms: 228.338506
+  type: 'test'
+  ...
+# Subtest: Zero LED output produces a black display in a dark room
+ok 11 - Zero LED output produces a black display in a dark room
+  ---
+  duration_ms: 212.502269
+  type: 'test'
+  ...
+# Subtest: Doubling PWM doubles untonemapped luminance
+ok 12 - Doubling PWM doubles untonemapped luminance
+  ---
+  duration_ms: 369.006349
+  type: 'test'
+  ...
+# Subtest: Halving transmission halves luminance
+ok 13 - Halving transmission halves luminance
+  ---
+  duration_ms: 192.008119
+  type: 'test'
+  ...
+# Subtest: Red transmission filter removes G/B components
+ok 14 - Red transmission filter removes G/B components
+  ---
+  duration_ms: 67.61761
+  type: 'test'
+  ...
+# Subtest: Exposure does not change physical statistics
+ok 15 - Exposure does not change physical statistics
+  ---
+  duration_ms: 144.25038
+  type: 'test'
+  ...
+# Subtest: Symmetric source and sheet produce a symmetric field
+ok 16 - Symmetric source and sheet produce a symmetric field
+  ---
+  duration_ms: 105.064553
+  type: 'test'
+  ...
+# Subtest: Increased distance lowers isolated LED peak
+ok 17 - Increased distance lowers isolated LED peak
+  ---
+  duration_ms: 236.367457
+  type: 'test'
+  ...
+# Subtest: Diffuser blur does not create net diffuse output
+ok 18 - Diffuser blur does not create net diffuse output
+  ---
+  duration_ms: 210.472354
+  type: 'test'
+  ...
+# Subtest: Ring mask leaves the central aperture empty
+ok 19 - Ring mask leaves the central aperture empty
+  ---
+  duration_ms: 330.358562
+  type: 'test'
+  ...
+# Subtest: Empty ROI falls back to full sheet and matches exported mask
+ok 20 - Empty ROI falls back to full sheet and matches exported mask
+  ---
+  duration_ms: 133.289517
+  type: 'test'
+  ...
+# Subtest: Empty LED list is a valid zero-light result
+ok 21 - Empty LED list is a valid zero-light result
+  ---
+  duration_ms: 164.020327
+  type: 'test'
+  ...
+# Subtest: Manual coordinates are sanitized and known keys only retained
+ok 22 - Manual coordinates are sanitized and known keys only retained
+  ---
+  duration_ms: 0.2918
+  type: 'test'
+  ...
+# Subtest: Overlarge LED layouts fail rather than silently truncate
+ok 23 - Overlarge LED layouts fail rather than silently truncate
+  ---
+  duration_ms: 0.899739
+  type: 'test'
+  ...
+# Subtest: Polygon rejects too few points
+ok 24 - Polygon rejects too few points
+  ---
+  duration_ms: 0.449989
+  type: 'test'
+  ...
+# Subtest: Narrow beam and maximum gap remain finite
+ok 25 - Narrow beam and maximum gap remain finite
+  ---
+  duration_ms: 0.147514
+  type: 'test'
+  ...
+1..25
+# tests 25
+# suites 0
+# pass 25
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2515.442233
