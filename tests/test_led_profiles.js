@@ -131,7 +131,7 @@ test('The selected full viewing angle maps to half normal intensity at each half
 });
 
 test('Switching between 5050 and 2020 products applies package clearance to automatic placement',()=>{
- const design=O.normalize({shape:'rect',width:10,height:10,layout:'grid',density:500,inset:0,pattern:'solid',color1:'#ffffff'});
+ const design=O.normalize({shape:'rect',width:10,height:10,tapeWidth:2,layout:'grid',density:500,inset:0,pattern:'solid',color1:'#ffffff'});
  const large=O.selectLEDModel(design,'WS2812B'),small=O.selectLEDModel(large,'WS2812C-2020');
  const largeLayout=O.makeLEDs(large),smallLayout=O.makeLEDs(small);
  assert.equal(largeLayout.leds.length,9);

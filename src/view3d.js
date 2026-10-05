@@ -55,18 +55,22 @@ function orientedSquare(x,y,size,angle){const c=Math.cos(angle),s=Math.sin(angle
 function circle(x,y,r,n=12){return Array.from({length:n},(_,i)=>[x+r*Math.cos(i*2*PI/n),y+r*Math.sin(i*2*PI/n)]);}
 // 接続されたテープを基板の立体として作り、各LEDをその上面へ載せる。
 // 端部の基板も作るので、LEDが1個だけのテープも台座に接触する。
-function mountedTapeGeometry(result){
- const s=result.state,layers=layerHeights(s),leds=result.leds||[],tapeWidth=s.packageSize+2,tapes=[],packages=[];
+function mountedTapeGeometry(result,optics=root.Optics){
+ const s=result.state,layers=layerHeights(s),leds=result.leds||[],tapeWidth=Number.isFinite(s.tapeWidth)&&s.tapeWidth>0?s.tapeWidth:s.packageSize+2,tapes=[],packages=[];
+ const footprints=optics&&typeof optics.tapeFootprints==='function'?points=>optics.tapeFootprints({...s,tapeWidth},points):null;
  for(let i=0;i<leds.length;i++){
-  const led=leds[i],previous=leds[i-1],tapeIndex=led.tapeIndex??0,indices=[led.index??i];
-  tapes.push({polygon:orientedSquare(led.x,led.y,tapeWidth,led.angle||0),bottom:layers.tapeBottom,top:layers.tapeTop,tapeIndex,ledIndices:indices});
-  if(previous&&(previous.tapeIndex??0)===tapeIndex){
+  const led=leds[i],previous=leds[i-1],tapeIndex=led.tapeIndex??0,indices=[led.index??i],point=[led.x,led.y,led.angle||0],single=footprints?footprints([point]):null;
+  tapes.push({polygon:single?single.tapes[0]:orientedSquare(led.x,led.y,tapeWidth,led.angle||0),bottom:layers.tapeBottom,top:layers.tapeTop,tapeIndex,ledIndices:indices});
+  // 除外されたLEDの欠番を直線で補うと、SVGの切り欠きを横断してしまう。
+  // 同じテープで、元の配線順も連続している場合だけ基板を接続する。
+  if(previous&&(previous.tapeIndex??0)===tapeIndex&&(previous.index??i-1)+1===(led.index??i)){
    const dx=led.x-previous.x,dy=led.y-previous.y,len=Math.hypot(dx,dy);
    if(len>1e-8){const ox=-dy/len*tapeWidth/2,oy=dx/len*tapeWidth/2;
-    tapes.push({polygon:[[previous.x+ox,previous.y+oy],[previous.x-ox,previous.y-oy],[led.x-ox,led.y-oy],[led.x+ox,led.y+oy]],bottom:layers.tapeBottom,top:layers.tapeTop,tapeIndex,ledIndices:[previous.index??i-1,...indices]});
+    const joined=footprints?footprints([[previous.x,previous.y,previous.angle||0],point]):null;
+    tapes.push({polygon:joined?joined.tapes.at(-1):[[previous.x+ox,previous.y+oy],[previous.x-ox,previous.y-oy],[led.x-ox,led.y-oy],[led.x+ox,led.y+oy]],bottom:layers.tapeBottom,top:layers.tapeTop,tapeIndex,ledIndices:[previous.index??i-1,...indices]});
    }
   }
-  packages.push({polygon:orientedSquare(led.x,led.y,s.packageSize,led.angle||0),bottom:layers.packageBottom,top:layers.packageTop,light:circle(led.x,led.y,s.aperture/2),led});
+  packages.push({polygon:single?single.packages[0]:orientedSquare(led.x,led.y,s.packageSize,led.angle||0),bottom:layers.packageBottom,top:layers.packageTop,light:circle(led.x,led.y,s.aperture/2),led});
  }
  return {layers,tapes,packages};
 }
@@ -85,7 +89,7 @@ function render(ctx,result,options={}){
  }
  // テープ底面を台座に接触させ、基板の厚みとLEDパッケージの高さを描く。
  if(showLED){
-  const mounted=mountedTapeGeometry(result),dir=camera.direction;
+  const mounted=mountedTapeGeometry(result,options.optics||root.Optics),dir=camera.direction;
   function prism(part,topColor,sideColor,kind){
    face(part.polygon.map(p=>[...p,part.top]),p=>filled(ctx,p,topColor,kind==='led'?'#ffffff38':'#a8afbc24'),kind);
    for(let i=0;i<part.polygon.length;i++){

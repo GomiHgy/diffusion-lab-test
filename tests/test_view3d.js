@@ -69,7 +69,7 @@ test('a single LED has a supporting tape footprint and its package keeps its rot
  }
  for(const p of pack.polygon){
   const dx=p[0]-led.x,dy=p[1]-led.y,localX=dx*Math.cos(angle)+dy*Math.sin(angle),localY=-dx*Math.sin(angle)+dy*Math.cos(angle);
-  assert.ok(Math.abs(localX)<(s.packageSize+2)/2&&Math.abs(localY)<(s.packageSize+2)/2,'package stays within its tape footprint');
+  assert.ok(Math.abs(localX)<s.tapeWidth/2&&Math.abs(localY)<s.tapeWidth/2,'package stays within its tape footprint');
  }
  assert.equal(tape.bottom,g.layers.baseTop);assert.equal(pack.bottom,tape.top);
 });
@@ -81,7 +81,7 @@ test('tape PCB bridges remain within their connected group and reach both LED ce
  const bridge=bridges[0].polygon;
  for(const [a,b,led] of [[bridge[0],bridge[1],leds[0]],[bridge[2],bridge[3],leds[1]]]){
   assert.ok(Math.abs((a[0]+b[0])/2-led.x)<1e-10);assert.ok(Math.abs((a[1]+b[1])/2-led.y)<1e-10);
-  assert.ok(Math.abs(Math.hypot(a[0]-b[0],a[1]-b[1])-(s.packageSize+2))<1e-10);
+  assert.ok(Math.abs(Math.hypot(a[0]-b[0],a[1]-b[1])-s.tapeWidth)<1e-10);
  }
  assert.ok(g.tapes.every(p=>p.bottom===g.layers.baseTop&&p.top===g.layers.packageBottom));
  assert.deepEqual(g.packages.map(p=>p.led),leds);

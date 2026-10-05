@@ -28,7 +28,11 @@ test('Empty ROI falls back to full sheet and matches exported mask',()=>{const r
 test('Empty LED list is a valid zero-light result',()=>{const r=solver.solve({...base,manual:[]});assert.equal(r.leds.length,0);assert.equal(r.stats.mean,0);assert.ok(r.warnings.length>0);});
 test('Manual coordinates are sanitized without deforming tapes; only known keys retained',()=>{const s=O.normalize({width:100,manual:[[Infinity,1],[1000,1000],[1,2]],junk:'x'});assert.equal(s.manual.length,2);assert.equal(s.manual[0][0],1000);assert.deepEqual(s.tapeLengths,[2]);assert.equal('junk' in s,false);});
 test('Overlarge LED layouts fail rather than silently truncate',()=>{assert.throws(()=>O.makeLEDs(O.normalize({...base,layout:'grid',width:2000,height:2000,density:1000})),/多|超/);});
-test('Polygon rejects too few points',()=>assert.throws(()=>O.shapeInfo(O.normalize({...base,shape:'polygon',polygon:'0,0\n100,100'})),/3点/));
+test('Polygon rejects too few points before automatic placement or even an empty manual layout',()=>{
+ const invalid={...base,shape:'polygon',polygon:'0,0\n100,100'};
+ assert.throws(()=>O.shapeInfo(O.normalize(invalid)),/3点/);
+ for(const layout of ['rows','grid','ring','perimeter','path','manual'])assert.throws(()=>O.makeLEDs(O.normalize({...invalid,layout,manual:[]})),/3点/);
+});
 
 test('Narrow beam and maximum gap remain finite',()=>{const m=-Math.log(2)/Math.log(Math.cos(10*Math.PI/360));for(const x of [0,100,2000])assert.ok(Number.isFinite(O.kernelValue(x,10,300,m)));close(O.kernelValue(0,0,300,m),1e6/90000);});
 
@@ -71,8 +75,9 @@ test('Sanitizing or truncating manual points keeps surviving group membership',(
  const s=O.normalize({manual:[[NaN,0],[0,0],[10,0],[20,0]],tapeLengths:[2,2]});assert.deepEqual(s.tapeLengths,[1,2]);
  const big=O.normalize({manual:Array.from({length:5100},(_,i)=>[i,0]),tapeLengths:[3000,2100]});assert.deepEqual(big.tapeLengths,[3000,2000]);assert.equal(big.manual.length,5000);
 });
-test('Resizing the board preserves tape geometry and colors; outside LEDs are excluded only from calculation',()=>{
+test('Resizing the board preserves tape geometry and colors; an invalid tape is excluded as a whole',()=>{
  const s=O.normalize({layout:'manual',width:100,height:60,manual:[[-40,0,0],[0,0,0],[40,0,0]],tapeLengths:[3]}),smaller=O.normalize({...s,width:30}),g=O.makeLEDs(smaller);
- assert.deepEqual(smaller.manual,s.manual);assert.deepEqual(smaller.tapeLengths,[3]);assert.equal(g.discarded,2);assert.equal(g.leds[0].index,1);assert.deepEqual(g.leds[0].rgb,O.makeLEDs(s).leds[1].rgb);
+ assert.deepEqual(smaller.manual,s.manual);assert.deepEqual(smaller.tapeLengths,[3]);assert.equal(g.discarded,3);assert.deepEqual(g.invalidTapes,[0]);assert.equal(g.leds.length,0);
+ assert.deepEqual(O.makeLEDs({...smaller,width:100}).leds,O.makeLEDs(s).leds,'restoring the board restores the original colors and wiring');
  const r=solver.solve({...smaller,quality:160});assert.ok(r.warnings.some(w=>w.includes('接続と座標は保持')));assert.deepEqual(r.tapeLengths,[3]);
 });

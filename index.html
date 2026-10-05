@@ -17,7 +17,7 @@
 <aside class="sidebar" id="sidebar" aria-label="シミュレーション設定">
 <div class="eyebrow">START WITH A SCENE</div><select id="scenePreset" class="preset-top" aria-label="サンプルシーン"><option value="">サンプルを選択…</option><option value="color">混色を見る · 2色グラデーション</option><option value="strip">LEDの粒を見る · 細い直線</option><option value="panel">面の均一さを見る · 白色パネル</option><option value="ring">リング型 · WS2812C-2020 / 150 LED/m</option><option value="foam">3 mm 白色フォーム風</option><option value="rgb">近距離のRGB分離を見る</option><option value="reset">初期状態に戻す</option></select>
 <section class="section"><h2><span>01</span> ベース・拡散板の輪郭</h2><label class="field"><span>形状</span><select data-key="shape"><option value="rect">長方形</option><option value="rounded">角丸長方形</option><option value="ellipse">円・楕円</option><option value="ring">円環・楕円環</option><option value="polygon">自由な多角形</option><option value="svg">SVGパスの輪郭</option></select></label><div class="two"><label class="field"><span>幅 W（mm）</span><input data-key="width" type="number" min="10" max="2000" step="1"></label><label class="field"><span>高さ H（mm）</span><input data-key="height" type="number" min="10" max="2000" step="1"></label></div><label class="field" data-show="shape:rounded"><span>角の半径（mm）</span><input data-key="radius" type="number" min="0" max="1000" step="1"></label><label class="field" data-show="shape:ring"><span>内径 / 外径（比率）</span><input data-key="hole" type="number" min="0.05" max="0.95" step="0.01"></label><div data-show="shape:polygon"><label class="field"><span>輪郭の頂点（左上 0,0 ／右下 100,100）</span><textarea data-key="polygon" spellcheck="false"></textarea></label><p class="hint">外周に沿った順番で x,y を入力。自己交差・穴付き多角形には非対応です。</p></div><div id="svgEditor" data-show="shape:svg" class="svg-editor"><div class="manual-tools"><button id="svgFileBtn" class="small">SVGファイルを開く</button></div><input id="svgFileInput" type="file" accept=".svg,image/svg+xml" hidden><label class="field"><span>SVG全文 または pathのd属性</span><textarea id="svgSource" spellcheck="false" maxlength="2097152" placeholder="M0 0 H100 V60 H0 Z" aria-describedby="svgHint svgImportStatus"></textarea></label><label class="field"><span>塗り規則</span><select id="svgFillRule"><option value="auto">SVGの指定を使う</option><option value="nonzero">nonzero</option><option value="evenodd">evenodd（入れ子を穴にする）</option></select></label><label class="inline-check"><input id="svgKeepAspect" type="checkbox" checked>取り込み時に縦横比を保つ</label><div class="manual-tools"><button id="svgApplyBtn" class="small">全パスを輪郭に適用</button></div><p id="svgImportStatus" class="interaction-hint" role="status" aria-live="polite"></p><p id="svgShapeSummary" class="hint"></p><p id="svgHint" class="hint">全path要素の塗り領域をまとめて取り込みます。重なり・離れた輪郭・穴に対応。曲線は線分で近似します。実寸は幅・高さ（mm）で指定してください。</p><p class="hint">SVGの余白・線幅・装飾は輪郭に含みません。図形・文字はSVG編集ソフトでパスへ変換してください。defs内のパス・use・CSS変換には未対応です。</p></div><p class="hint">LED面と拡散板が平行な平面モデル。輪郭と寸法は両面で共通です。</p></section>
-<section class="section"><h2><span>02</span> LEDテープ・配置</h2><label class="field"><span>配置方法</span><select data-key="layout"><option value="rows">横向きテープを並列配置</option><option value="grid">正方格子のパネル</option><option value="perimeter">輪郭に沿って配置</option><option value="ring">円・楕円に沿って配置</option><option value="path">自由なテープ経路</option><option value="manual">テープ位置を個別に調整</option></select></label><div class="two"><label class="field"><span>LEDテープの本数</span><input id="tapeCount" type="number" min="1" max="100" step="1" aria-describedby="tapeCountStatus"></label><button id="applyTapeCount" class="small count-apply">本数を適用</button></div><p id="tapeCountStatus" class="interaction-hint" role="status" aria-live="polite"></p><div data-hide="layout:manual"><label class="field"><span>テープ密度（LED / m）</span><input data-key="density" type="number" min="1" max="1000" step="1"></label><div class="preset-inline"><button data-density="30">30</button><button data-density="60">60</button><button data-density="144">144</button><button data-density="150">150</button></div></div><div class="two"><label class="field" data-show="layout:rows"><span>列の間隔（mm）</span><input data-key="rowSpacing" type="number" min="1" max="1000" step="1"></label><label class="field" data-hide="layout:manual,path"><span>端からの余白（mm）</span><input data-key="inset" type="number" min="0" max="1000" step="1"></label></div><label class="field" data-show="layout:rows,grid"><span>配置の回転（°）</span><input data-key="rotation" type="number" min="-180" max="180" step="1"></label><div data-show="layout:path"><label class="field"><span>経路の点（mm、中心が 0,0）</span><textarea data-key="path" spellcheck="false"></textarea></label><div class="manual-tools"><button id="pathDrawBtn" class="small">画面で経路を描く</button><button id="pathFinishBtn" class="small">確定</button></div><p class="hint">x は右方向、y は下方向。各点を直線でつなぎ、指定ピッチで配置します。</p></div><div id="tapeEditor" data-show="view:layout" class="tape-editor"><label class="field"><span>編集するLEDテープ</span><select id="tapeSelect" aria-describedby="tapeHint"><option value="-1">テープを選択</option></select></label><div class="two"><label class="field"><span>先頭LEDのX（mm）</span><input id="tapeX" type="number" step="0.1" disabled aria-describedby="tapeHint tapePositionStatus"></label><label class="field"><span>先頭LEDのY（mm）</span><input id="tapeY" type="number" step="0.1" disabled aria-describedby="tapeHint tapePositionStatus"></label></div><button id="applyTapePosition" class="small" disabled>X・Yの位置を適用</button><div class="two"><label class="field"><span>テープの角度（°）</span><input id="tapeAngle" type="number" min="-180" max="180" step="1" disabled></label><button id="applyTapeAngle" class="small count-apply" disabled>角度を適用</button></div><button id="tapeRotateModeBtn" class="small" disabled aria-pressed="false">画面で回転する</button><p class="hint">テープをダブルクリックしても回転モードに切り替わります。テープの中心を軸に回転します。角度は先頭LEDの向き、0°は右向きです。</p><label class="field"><span>整列する範囲</span><select id="alignScope"><option value="selected">選択したテープ</option><option value="all">配置全体（間隔を保持）</option></select></label><div class="align-tools" aria-label="テープの整列"><button data-align="left">左揃え</button><button data-align="centerX">左右中央</button><button data-align="right">右揃え</button><button data-align="top">上揃え</button><button data-align="centerY">上下中央</button><button data-align="bottom">下揃え</button></div><p class="hint">板の外形に対して揃えます。端揃えでは設定した余白を使います。輪郭内に収まらない操作は反映しません。</p><p id="tapePositionStatus" class="interaction-hint" role="status" aria-live="polite"></p><p id="tapeHint" class="hint">原点は板の中心。Xは右、Yは下が正。テープまたはLEDを選んでドラッグすると、接続したテープ全体が移動します。間隔・並び・向きは保持します。画面を選択して矢印キーで1 mmずつ移動（Shiftで10 mm、Ctrlで0.1 mm）。ダブルクリックで回転モードに切り替わります。</p><p class="hint">並列配置は各行が1本。蛇行グリッド・通常の外周・円環・経路は全体が1本です。SVGの外周は境界ごとに別のテープです。初めて動かすと位置調整モードに切り替わります。</p></div><div data-show="layout:manual"><div class="manual-tools"><button id="convertManual" class="small">直前の自動配置をコピー</button><button id="clearManual" class="small">全テープを削除</button></div><p class="hint">配置の密度・経路を作り直す場合は、自動配置に切り替えてください。</p></div><label class="field"><span>フルカラーLEDの種類</span><select data-key="ledModel"><option value="WS2812B">WS2812B · 5050系</option><option value="WS2812B-MINI">WS2812B-MINI · 3535系</option><option value="WS2812C-2020">WS2812C-2020 · 2020系</option><option value="SK6812">SK6812（RGB） · 5050系</option><option value="SK6812-MINI">SK6812-MINI · 3535系</option><option value="custom">カスタム・旧設定</option></select></label><div class="two"><label class="field"><span>外形の代表幅（mm）</span><input data-key="packageSize" type="number" min="0.5" max="20" step="0.01"></label><label class="field"><span>有効発光幅（mm）</span><input data-key="aperture" type="number" min="0.05" max="20" step="0.001" aria-describedby="ledValueSummary"></label></div><p class="hint led-value-summary" id="ledValueSummary" aria-live="polite"></p><p class="hint led-photometry-summary" id="ledPhotometrySummary" aria-live="polite"></p><button id="ledPresetBtn" class="small">型番の初期値に戻す</button><details class="helpdetails"><summary>選択LEDの資料・近似について</summary><div class="hint led-spec-details" id="ledSpecDetails"></div></details><details class="helpdetails"><summary>光学特性・RGBダイの設定</summary><label class="field"><span>配光の半値角・全幅（°）</span><input data-key="angle" type="number" min="10" max="175" step="1"></label><div class="three"><label class="field"><span>R 光度 mcd</span><input data-key="mcdR" type="number" min="0" max="200000" step="0.1" aria-describedby="ledPhotometrySummary"></label><label class="field"><span>G 光度 mcd</span><input data-key="mcdG" type="number" min="0" max="200000" step="0.1" aria-describedby="ledPhotometrySummary"></label><label class="field"><span>B 光度 mcd</span><input data-key="mcdB" type="number" min="0" max="200000" step="0.1" aria-describedby="ledPhotometrySummary"></label></div><label class="inline-check"><input data-key="splitRGB" type="checkbox">RGBダイを分離する（配置は仮定）</label><label class="field"><span>LED入力値の解釈</span><select data-key="pwmMode"><option value="raw">PWM値：0〜255に比例</option><option value="srgb">sRGBを線形化して入力</option></select></label><p class="hint">型番を選ぶとRGB各色の資料Typ値、未記載の場合は記載範囲の中点を設定します。mcdは正面光度で、ルーメンとは異なります。実測値で上書きできます。LED出力は別のPWM係数として掛けるため、光度入力を出力%で減らす必要はありません。</p></details><label class="field"><span>点灯パターン（配線順に適用）</span><select data-key="pattern"><option value="solid">全LEDを同じ色にする</option><option value="gradient">2色グラデーション</option><option value="alternating">2色を交互に点灯</option><option value="rainbow">虹色グラデーション</option><option value="rgb">R → G → B を繰り返す</option><option value="gaming">ゲーミング（動くRGB演出）</option></select></label><div id="gamingControls" data-show="pattern:gaming" class="gaming-controls"><label class="field"><span>RGB演出</span><select data-key="gamingScene"><option value="rainbowWave">レインボーウェーブ</option><option value="chase">RGBチェイス</option><option value="breathe">虹色ブリージング</option><option value="cyberPulse">シアン・マゼンタパルス</option></select></label><div class="two"><button id="gamingPlayBtn" class="small">再生</button><label class="field"><span>再生速度（倍）</span><input data-key="gamingSpeed" type="number" min="0.1" max="3" step="0.1"></label></div><label class="field"><span>演出の位置 <output id="gamingPhaseLabel">0%</output></span><input id="gamingPhase" type="range" min="0" max="100" step="0.1"></label><p id="gamingStatus" class="interaction-hint" role="status" aria-live="polite"></p><p class="hint">配線順に点灯が動きます。再生中は高速解像度の光学計算を時間補間。停止すると指定精度で計算し、PNG・CSVを保存できます。</p></div><div class="two"><label class="field"><span>カラー 1</span><input data-key="color1" type="color"></label><label class="field" data-show="pattern:gradient,alternating"><span>カラー 2</span><input data-key="color2" type="color"></label></div><div class="range-head"><span>LEDの出力</span><output data-out="brightness" data-suffix=" %"></output></div><div class="control-line"><input data-key="brightness" type="range" min="0" max="100" step="1" aria-label="LEDの出力"><input data-key="brightness" type="number" min="0" max="100" step="1" aria-label="LEDの出力 数値"></div><p class="hint" id="ledFluxSummary" aria-live="polite"></p></section>
+<section class="section"><h2><span>02</span> LEDテープ・配置</h2><label class="field"><span>配置方法</span><select data-key="layout"><option value="rows">横向きテープを並列配置</option><option value="grid">正方格子のパネル</option><option value="perimeter">輪郭に沿って配置</option><option value="ring">円・楕円に沿って配置</option><option value="path">自由なテープ経路</option><option value="manual">テープ位置を個別に調整</option></select></label><div class="two"><label class="field"><span>LEDテープの本数</span><input id="tapeCount" type="number" min="1" max="100" step="1" aria-describedby="tapeCountStatus"></label><button id="applyTapeCount" class="small count-apply">本数を適用</button></div><p id="tapeCountStatus" class="interaction-hint" role="status" aria-live="polite"></p><button id="autoTapeCount" class="small" data-show="layout:rows">本数を自動に戻す</button><label class="field"><span>LEDテープの幅（mm）</span><input data-key="tapeWidth" type="number" min="0.1" max="100" step="0.1" aria-describedby="tapeWidthHint tapeOutlineStatus"></label><p id="tapeWidthHint" class="hint">基板の実際の幅を入力してください。新規設定の8 mmは仮値です。LEDの外形幅とは別に、基板の端部とLED間の接続まで輪郭内に収まるか確認します。</p><p id="tapeOutlineStatus" class="interaction-hint" role="status" aria-live="polite"></p><div data-hide="layout:manual"><label class="field"><span>テープ密度（LED / m）</span><input data-key="density" type="number" min="1" max="1000" step="1"></label><div class="preset-inline"><button data-density="30">30</button><button data-density="60">60</button><button data-density="144">144</button><button data-density="150">150</button></div></div><div class="two"><label class="field" data-show="layout:rows"><span>列の間隔（mm）</span><input data-key="rowSpacing" type="number" min="1" max="1000" step="1"></label><label class="field" data-hide="layout:manual,path"><span>端からの余白（mm）</span><input data-key="inset" type="number" min="0" max="1000" step="1"></label></div><label class="field" data-show="layout:rows,grid"><span>配置の回転（°）</span><input data-key="rotation" type="number" min="-180" max="180" step="1"></label><div data-show="layout:path"><label class="field"><span>経路の点（mm、中心が 0,0）</span><textarea data-key="path" spellcheck="false"></textarea></label><div class="manual-tools"><button id="pathDrawBtn" class="small">画面で経路を描く</button><button id="pathFinishBtn" class="small">確定</button></div><p class="hint">x は右方向、y は下方向。各点を直線でつなぎ、指定ピッチで配置します。</p></div><div id="tapeEditor" data-show="view:layout" class="tape-editor"><label class="field"><span>編集するLEDテープ</span><select id="tapeSelect" aria-describedby="tapeHint"><option value="-1">テープを選択</option></select></label><div class="two"><label class="field"><span>先頭LEDのX（mm）</span><input id="tapeX" type="number" step="0.1" disabled aria-describedby="tapeHint tapePositionStatus"></label><label class="field"><span>先頭LEDのY（mm）</span><input id="tapeY" type="number" step="0.1" disabled aria-describedby="tapeHint tapePositionStatus"></label></div><button id="applyTapePosition" class="small" disabled>X・Yの位置を適用</button><div class="two"><label class="field"><span>テープの角度（°）</span><input id="tapeAngle" type="number" min="-180" max="180" step="1" disabled></label><button id="applyTapeAngle" class="small count-apply" disabled>角度を適用</button></div><button id="tapeRotateModeBtn" class="small" disabled aria-pressed="false">画面で回転する</button><p class="hint">テープをダブルクリックしても回転モードに切り替わります。テープの中心を軸に回転します。角度は先頭LEDの向き、0°は右向きです。</p><label class="field"><span>整列する範囲</span><select id="alignScope"><option value="selected">選択したテープ</option><option value="all">配置全体（間隔を保持）</option></select></label><div class="align-tools" aria-label="テープの整列"><button data-align="left">左揃え</button><button data-align="centerX">左右中央</button><button data-align="right">右揃え</button><button data-align="top">上揃え</button><button data-align="centerY">上下中央</button><button data-align="bottom">下揃え</button></div><p class="hint">板の外形に対して揃えます。端揃えでは設定した余白を使います。輪郭内に収まらない操作は反映しません。</p><p id="tapePositionStatus" class="interaction-hint" role="status" aria-live="polite"></p><p id="tapeHint" class="hint">原点は板の中心。Xは右、Yは下が正。テープまたはLEDを選んでドラッグすると、接続したテープ全体が移動します。間隔・並び・向きは保持します。画面を選択して矢印キーで1 mmずつ移動（Shiftで10 mm、Ctrlで0.1 mm）。ダブルクリックで回転モードに切り替わります。</p><p class="hint">並列配置は各行、外周は境界ごとが基本です。自動配置は、切り欠き・穴・テープ幅により安全に接続できない箇所で別のテープに分かれます。各本の間を基板でつなぎません。自由な経路は勝手に切断せず、不適合な経路を拒否します。初めて動かすと位置調整モードに切り替わります。</p></div><div data-show="layout:manual"><div class="manual-tools"><button id="convertManual" class="small">直前の自動配置をコピー</button><button id="clearManual" class="small">全テープを削除</button></div><p class="hint">配置の密度・経路を作り直す場合は、自動配置に切り替えてください。</p></div><label class="field"><span>フルカラーLEDの種類</span><select data-key="ledModel"><option value="WS2812B">WS2812B · 5050系</option><option value="WS2812B-MINI">WS2812B-MINI · 3535系</option><option value="WS2812C-2020">WS2812C-2020 · 2020系</option><option value="SK6812">SK6812（RGB） · 5050系</option><option value="SK6812-MINI">SK6812-MINI · 3535系</option><option value="custom">カスタム・旧設定</option></select></label><div class="two"><label class="field"><span>外形の代表幅（mm）</span><input data-key="packageSize" type="number" min="0.5" max="20" step="0.01"></label><label class="field"><span>有効発光幅（mm）</span><input data-key="aperture" type="number" min="0.05" max="20" step="0.001" aria-describedby="ledValueSummary"></label></div><p class="hint led-value-summary" id="ledValueSummary" aria-live="polite"></p><p class="hint led-photometry-summary" id="ledPhotometrySummary" aria-live="polite"></p><button id="ledPresetBtn" class="small">型番の初期値に戻す</button><details class="helpdetails"><summary>選択LEDの資料・近似について</summary><div class="hint led-spec-details" id="ledSpecDetails"></div></details><details class="helpdetails"><summary>光学特性・RGBダイの設定</summary><label class="field"><span>配光の半値角・全幅（°）</span><input data-key="angle" type="number" min="10" max="175" step="1"></label><div class="three"><label class="field"><span>R 光度 mcd</span><input data-key="mcdR" type="number" min="0" max="200000" step="0.1" aria-describedby="ledPhotometrySummary"></label><label class="field"><span>G 光度 mcd</span><input data-key="mcdG" type="number" min="0" max="200000" step="0.1" aria-describedby="ledPhotometrySummary"></label><label class="field"><span>B 光度 mcd</span><input data-key="mcdB" type="number" min="0" max="200000" step="0.1" aria-describedby="ledPhotometrySummary"></label></div><label class="inline-check"><input data-key="splitRGB" type="checkbox">RGBダイを分離する（配置は仮定）</label><label class="field"><span>LED入力値の解釈</span><select data-key="pwmMode"><option value="raw">PWM値：0〜255に比例</option><option value="srgb">sRGBを線形化して入力</option></select></label><p class="hint">型番を選ぶとRGB各色の資料Typ値、未記載の場合は記載範囲の中点を設定します。mcdは正面光度で、ルーメンとは異なります。実測値で上書きできます。LED出力は別のPWM係数として掛けるため、光度入力を出力%で減らす必要はありません。</p></details><label class="field"><span>点灯パターン（配線順に適用）</span><select data-key="pattern"><option value="solid">全LEDを同じ色にする</option><option value="gradient">2色グラデーション</option><option value="alternating">2色を交互に点灯</option><option value="rainbow">虹色グラデーション</option><option value="rgb">R → G → B を繰り返す</option><option value="gaming">ゲーミング（動くRGB演出）</option></select></label><div id="gamingControls" data-show="pattern:gaming" class="gaming-controls"><label class="field"><span>RGB演出</span><select data-key="gamingScene"><option value="rainbowWave">レインボーウェーブ</option><option value="chase">RGBチェイス</option><option value="breathe">虹色ブリージング</option><option value="cyberPulse">シアン・マゼンタパルス</option></select></label><div class="two"><button id="gamingPlayBtn" class="small">再生</button><label class="field"><span>再生速度（倍）</span><input data-key="gamingSpeed" type="number" min="0.1" max="3" step="0.1"></label></div><label class="field"><span>演出の位置 <output id="gamingPhaseLabel">0%</output></span><input id="gamingPhase" type="range" min="0" max="100" step="0.1"></label><p id="gamingStatus" class="interaction-hint" role="status" aria-live="polite"></p><p class="hint">配線順に点灯が動きます。再生中は高速解像度の光学計算を時間補間。停止すると指定精度で計算し、PNG・CSVを保存できます。</p></div><div class="two"><label class="field"><span>カラー 1</span><input data-key="color1" type="color"></label><label class="field" data-show="pattern:gradient,alternating"><span>カラー 2</span><input data-key="color2" type="color"></label></div><div class="range-head"><span>LEDの出力</span><output data-out="brightness" data-suffix=" %"></output></div><div class="control-line"><input data-key="brightness" type="range" min="0" max="100" step="1" aria-label="LEDの出力"><input data-key="brightness" type="number" min="0" max="100" step="1" aria-label="LEDの出力 数値"></div><p class="hint" id="ledFluxSummary" aria-live="polite"></p></section>
 <section class="section"><h2><span>03</span> 拡散材料</h2><label class="field"><span>材料プリセット（すべて仮定値）</span><select data-key="material"><option value="opal">乳白アクリル風</option><option value="strong">強拡散の白色板風</option><option value="frost">すりガラス風・弱拡散</option><option value="clear">透明板風</option><option value="foam">白色フォーム / コスプレボード風</option><option value="custom">カスタム・実測値入力</option></select></label><label class="field"><span>材料色 ARGB（#AARRGGBB）</span><div class="material-color-row"><input data-key="argb" type="text" maxlength="9" pattern="#[0-9A-Fa-f]{8}" spellcheck="false" aria-label="材料色 ARGB"><input id="materialPicker" type="color" aria-label="材料のRGB色"></div></label><p class="hint">A は<strong>着色の強さ</strong>。00＝無着色、FF＝RGBを完全適用。透過率・拡散率とは別のパラメータです。</p><div class="two"><label class="field"><span>厚さ（mm）</span><input data-key="thickness" type="number" min="0.1" max="30" step="0.1"></label><label class="field"><span>透過率（%）</span><input data-key="transmission" type="number" min="0" max="100" step="1"></label></div><label class="field"><span>拡散成分比（%・独自モデル）</span><input data-key="diffuse" type="number" min="0" max="100" step="0.1"></label><label class="field"><span>内部にじみ σ / 厚さ</span><input data-key="spread" type="number" min="0" max="5" step="0.05"></label><p class="hint">にじみの標準偏差 σ＝厚さ×係数。透過率は入力厚さでの値として扱い、厚さ変更による吸収の増減は自動推定しません。拡散成分比は ASTM ヘイズ値ではありません。</p></section>
 <section class="section"><h2><span>04</span> 計算・評価</h2><label class="field"><span>計算解像度（長辺）</span><select data-key="quality"><option value="160">高速 · 160 点</option><option value="288">標準 · 288 点</option><option value="448">高精細 · 448 点</option></select></label><label class="field"><span>評価から端を除く幅（mm）</span><input data-key="roi" type="number" min="0" max="500" step="0.5"></label><label class="field"><span>校正・材料のメモ</span><input data-key="customLabel" type="text" maxlength="200"></label><button id="csvBtn" style="width:100%;font-size:11px">光量データ CSV を保存</button><p class="hint">数値は線形の発光成分のみ。露出、画面の色変換、周囲光は評価指標に含めません。</p><div class="info-box">実測校正前の設計比較モデルです。反射壁・レンズ・屈折・曲面・分光透過は計算していません。</div></section>
 </aside>
@@ -32,7 +32,7 @@
 <footer class="footer"><span>Diffusion Lab 1.0 · 平面・正面観察の近似モデル · 実測校正前</span><span><button id="modelBtn">モデル・使い方・限界について</button>　 <button id="selfTestBtn">計算セルフテスト</button></span></footer></div></main>
 <input type="file" id="fileInput" accept=".json,application/json" hidden><div id="toast" class="toast" role="status" hidden></div>
 <div id="modelModal" class="modal-backdrop" hidden><article class="modal" role="dialog" aria-modal="true" aria-labelledby="modelTitle"><button class="modal-close" id="closeModal">閉じる ✕</button><h2 id="modelTitle">モデルと使い方</h2><p>LEDの光が距離とともに重なり、拡散板の面内に分布する様子を比較します。これは製品の測光データから構築した検証済みデジタルツインではなく、<strong>物理式を使った調整可能な設計比較モデル</strong>です。</p><h3>まず試す</h3><p>サンプルを選ぶ → LED密度・形状・材料を設定 → 距離を変更 →「6つの距離を計算」。白一色の均一度と、色を交互にしたときの混色は別々に確認すると判断しやすくなります。</p><p>形状「SVGパスの輪郭」では、SVGファイルまたはd属性を読み込み、全パスの塗り領域をまとめて板の輪郭にできます。曲線は線分で近似します。実寸は幅・高さ（mm）で指定してください。
-「LED配置」で実装位置を確認できます。テープやLEDを選ぶと、接続したテープ全体をドラッグ移動できます。左のX・Yは配線順で先頭のLEDの座標です。入力後「X・Yの位置を適用」またはEnterで移動します。LED間隔・並び・向きは保持され、Escapeでドラッグを取り消します。「自由なテープ経路」ではボタンで描画を開始し、クリックで点を追加して Enter または「確定」で終了します。Escapeで描画を取り消します。</p><h3>光の計算</h3><div class="equation">I(θ) = I₀ cosᵐ(θ)<br>m = −ln(2) / ln(cos(全幅半値角 / 2))<br>E = Σ I₀ cosᵐ(θ) cos(θ) / r²<br>L = T × tint × [H × Gaussian(E) / π + (1 − H) × Ldirect]</div><p>距離は計算内部で単位換算し、RGB各色の正面光度を用いて照度 E を求めます。有効発光面を小さな面要素に分割し、格子上に配置してゼロ詰めFFTで畳み込みます。H は独自の拡散成分比で、散乱光を Lambertian、非散乱光を正面から見える発光面として近似します。H は測定規格のヘイズ値ではありません。Gaussian の幅 σ は厚さ×内部にじみ係数です。</p><p>LEDの種類は参照したデータシートの版に対応します。WS2812BとWS2812B-MINIは機械図の開口を円形とみなし、面積が等しい正方形の光源幅へ近似します。これは光学的な有効発光面の規格値ではありません。ほかの3種類の幅は資料未記載のため比較用の仮定です。SK6812とSK6812-MINIの半値角全幅120°は資料値、Worldsemiの3種類の120°は資料未記載のため仮定です。各値の根拠と資料は設定欄で確認できます。型番を選ぶとRGB正面光度も資料のTyp値または記載範囲の中点に切り替えます。光学表の電流条件と採用値の根拠は設定欄に表示します。資料に絶対光束lmの記載はないため、光源1個のRGB白の光束は現在の配光から Φ = 2π × I₀[cd] / (m+1) を色別に積分した推定値です。拡散板後の光束や現在の点灯色の合計ではありません。実測値の入力と保存済み光度は保持します。</p><h3>ARGB の意味</h3><p><code>#AARRGGBB</code> を使います。RGB は sRGB として線形化した後、簡易な透過色フィルタとして適用します。A は無着色と指定色の間の補間係数で、<code>tint = (1−A) + A×linearRGB</code>。A=00 は無着色、A=FF は指定色を完全に適用します。A を光学的な不透明度や透過率とはみなしません。</p><p>透過率 T と拡散成分比 H は独立入力です。例えば白色 <code>#FFFFFFFF</code> でも T を0にすれば発光は出ません。厚さ変更はにじみに反映しますが、吸収の変化は自動推定しません。材料を変更したら、その厚さでの透過率も設定してください。</p><h3>結果の読み方</h3><p>均一さは評価領域の暗い側5パーセンタイルと明るい側95パーセンタイルの比です。100%に近いほど均一ですが、色の均一性や最低限必要な明るさを保証しません。RGBで異なる色を点灯した場合、その光度差も指標に含まれます。光量マップの上限はその画像の P95 で、異なる条件の絶対輝度比較には平均輝度の数値を使ってください。</p><p>表示は理想的な sRGB 原色を用いた近似です。RGB光度の各値を sRGB の Y 係数で除して表示チャンネルに変換し、露出・階調処理を適用します。PWMモードでは色の入力値は明るさに比例します。画面と実LEDのスペクトル・輝度範囲は一致しません。</p><p>距離で露出を自動変更しません。「露出を1回調整」はその時点の明るさに合わせるだけです。露出や周囲光は指標の計算に含めません。周囲光の表示は、材料色を使った独立の外観近似で、材料の反射率を実測したものではありません。</p><h3>再現しないもの</h3><p>曲面・傾斜・STL/STEP形状、側壁や背面の反射、導光板、遮蔽物、LED封止レンズ、屈折・フレネル反射、角度依存透過、厳密な多重散乱、波長ごとの透過、カメラのレンズ・人の順応は未実装です。低拡散材の直視像、非常に近い距離、格子より小さい発光面は特に誤差が増えます。内部にじみが大きい複雑な輪郭では、ガウス近似が切り欠きをまたいで光を広げる場合があります。</p><p>透過率・にじみの材料プリセットと未記載の光源寸法・角度は説明用の仮定値です。光度は参照した版・電流条件の資料値または範囲の中点を使います。実物の材質名が似ていても一致するとは限りません。寸法設計を決定する前に実機で確認してください。</p><h3>保存・公開</h3><p>すべてブラウザ内で計算し、入力は外部に送信しません。設定の自動保存は同じブラウザの localStorage を利用し、使えない場合も動作します。設定JSON、PNG、格子CSVを書き出せます。このHTMLだけでオフライン動作し、同じファイルを index.html として静的ホスティングにも置けます。</p><h3>根拠となる公開資料</h3><p><a href="https://www.pbr-book.org/4ed/Light_Sources/Point_Lights" target="_blank" rel="noopener noreferrer">PBRT 4e — Point Lights</a>：逆二乗則と点光源。<br><a href="https://www.pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection" target="_blank" rel="noopener noreferrer">PBRT 4e — Diffuse Reflection</a>：Lambertianモデルと π による正規化。<br><a href="https://www.pbr-book.org/4ed/Volume_Scattering/Phase_Functions" target="_blank" rel="noopener noreferrer">PBRT 4e — Phase Functions</a>：散乱の角度分布が材料で異なること。<br><a href="https://www.plexiglas.de/en/service/product-info/light-transmission" target="_blank" rel="noopener noreferrer">PLEXIGLAS — Light transmission</a>：材料種・板厚と透過率の関係。<br><a href="https://www.plexiglas.de/en/products/plexiglas/plexiglas-led" target="_blank" rel="noopener noreferrer">PLEXIGLAS LED</a>：拡散用途・製品ごとの違い。</p><p>資料は基礎モデルの参考です。掲載メーカーがこのアプリやプリセットを検証・承認したことを意味しません。</p></article></div>
+「LEDテープの幅（mm）」には実物の基板幅を入力してください。新規設定の8 mmは仮値です。基板の端部、LED外形、LED間の幅のある接続まで輪郭内に収まるか確認します。自動配置は切り欠きや穴を跨ぐ部分で別のテープに分け、手動移動・回転・整列と自由な経路は収まらない操作を拒否します。各本の間の電線接続、実物の切断単位・曲げ半径は計算に含みません。</p><p>「LED配置」で実装位置を確認できます。テープやLEDを選ぶと、接続したテープ全体をドラッグ移動できます。左のX・Yは配線順で先頭のLEDの座標です。入力後「X・Yの位置を適用」またはEnterで移動します。LED間隔・並び・向きは保持され、Escapeでドラッグを取り消します。「自由なテープ経路」ではボタンで描画を開始し、クリックで点を追加して Enter または「確定」で終了します。Escapeで描画を取り消します。</p><h3>光の計算</h3><div class="equation">I(θ) = I₀ cosᵐ(θ)<br>m = −ln(2) / ln(cos(全幅半値角 / 2))<br>E = Σ I₀ cosᵐ(θ) cos(θ) / r²<br>L = T × tint × [H × Gaussian(E) / π + (1 − H) × Ldirect]</div><p>距離は計算内部で単位換算し、RGB各色の正面光度を用いて照度 E を求めます。有効発光面を小さな面要素に分割し、格子上に配置してゼロ詰めFFTで畳み込みます。H は独自の拡散成分比で、散乱光を Lambertian、非散乱光を正面から見える発光面として近似します。H は測定規格のヘイズ値ではありません。Gaussian の幅 σ は厚さ×内部にじみ係数です。</p><p>LEDの種類は参照したデータシートの版に対応します。WS2812BとWS2812B-MINIは機械図の開口を円形とみなし、面積が等しい正方形の光源幅へ近似します。これは光学的な有効発光面の規格値ではありません。ほかの3種類の幅は資料未記載のため比較用の仮定です。SK6812とSK6812-MINIの半値角全幅120°は資料値、Worldsemiの3種類の120°は資料未記載のため仮定です。各値の根拠と資料は設定欄で確認できます。型番を選ぶとRGB正面光度も資料のTyp値または記載範囲の中点に切り替えます。光学表の電流条件と採用値の根拠は設定欄に表示します。資料に絶対光束lmの記載はないため、光源1個のRGB白の光束は現在の配光から Φ = 2π × I₀[cd] / (m+1) を色別に積分した推定値です。拡散板後の光束や現在の点灯色の合計ではありません。実測値の入力と保存済み光度は保持します。</p><h3>ARGB の意味</h3><p><code>#AARRGGBB</code> を使います。RGB は sRGB として線形化した後、簡易な透過色フィルタとして適用します。A は無着色と指定色の間の補間係数で、<code>tint = (1−A) + A×linearRGB</code>。A=00 は無着色、A=FF は指定色を完全に適用します。A を光学的な不透明度や透過率とはみなしません。</p><p>透過率 T と拡散成分比 H は独立入力です。例えば白色 <code>#FFFFFFFF</code> でも T を0にすれば発光は出ません。厚さ変更はにじみに反映しますが、吸収の変化は自動推定しません。材料を変更したら、その厚さでの透過率も設定してください。</p><h3>結果の読み方</h3><p>均一さは評価領域の暗い側5パーセンタイルと明るい側95パーセンタイルの比です。100%に近いほど均一ですが、色の均一性や最低限必要な明るさを保証しません。RGBで異なる色を点灯した場合、その光度差も指標に含まれます。光量マップの上限はその画像の P95 で、異なる条件の絶対輝度比較には平均輝度の数値を使ってください。</p><p>表示は理想的な sRGB 原色を用いた近似です。RGB光度の各値を sRGB の Y 係数で除して表示チャンネルに変換し、露出・階調処理を適用します。PWMモードでは色の入力値は明るさに比例します。画面と実LEDのスペクトル・輝度範囲は一致しません。</p><p>距離で露出を自動変更しません。「露出を1回調整」はその時点の明るさに合わせるだけです。露出や周囲光は指標の計算に含めません。周囲光の表示は、材料色を使った独立の外観近似で、材料の反射率を実測したものではありません。</p><h3>再現しないもの</h3><p>曲面・傾斜・STL/STEP形状、側壁や背面の反射、導光板、遮蔽物、LED封止レンズ、屈折・フレネル反射、角度依存透過、厳密な多重散乱、波長ごとの透過、カメラのレンズ・人の順応は未実装です。低拡散材の直視像、非常に近い距離、格子より小さい発光面は特に誤差が増えます。内部にじみが大きい複雑な輪郭では、ガウス近似が切り欠きをまたいで光を広げる場合があります。</p><p>透過率・にじみの材料プリセットと未記載の光源寸法・角度は説明用の仮定値です。光度は参照した版・電流条件の資料値または範囲の中点を使います。実物の材質名が似ていても一致するとは限りません。寸法設計を決定する前に実機で確認してください。</p><h3>保存・公開</h3><p>すべてブラウザ内で計算し、入力は外部に送信しません。設定の自動保存は同じブラウザの localStorage を利用し、使えない場合も動作します。設定JSON、PNG、格子CSVを書き出せます。このHTMLだけでオフライン動作し、同じファイルを index.html として静的ホスティングにも置けます。</p><h3>根拠となる公開資料</h3><p><a href="https://www.pbr-book.org/4ed/Light_Sources/Point_Lights" target="_blank" rel="noopener noreferrer">PBRT 4e — Point Lights</a>：逆二乗則と点光源。<br><a href="https://www.pbr-book.org/4ed/Reflection_Models/Diffuse_Reflection" target="_blank" rel="noopener noreferrer">PBRT 4e — Diffuse Reflection</a>：Lambertianモデルと π による正規化。<br><a href="https://www.pbr-book.org/4ed/Volume_Scattering/Phase_Functions" target="_blank" rel="noopener noreferrer">PBRT 4e — Phase Functions</a>：散乱の角度分布が材料で異なること。<br><a href="https://www.plexiglas.de/en/service/product-info/light-transmission" target="_blank" rel="noopener noreferrer">PLEXIGLAS — Light transmission</a>：材料種・板厚と透過率の関係。<br><a href="https://www.plexiglas.de/en/products/plexiglas/plexiglas-led" target="_blank" rel="noopener noreferrer">PLEXIGLAS LED</a>：拡散用途・製品ごとの違い。</p><p>資料は基礎モデルの参考です。掲載メーカーがこのアプリやプリセットを検証・承認したことを意味しません。</p></article></div>
 <script id="gaming-core">/* 周期演出のPWMと、線形な光学計算結果の時間補間。 */
 (function(root){
 'use strict';
@@ -53,11 +53,224 @@ function interpolate(frames,phase,out=null){const p=wrap(phase)*frames.length,i=
 }
 const api={scenes,colors,interpolate,wrap};root.Gaming=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof self!=='undefined'?self:globalThis);
+</script><script id="tape-geometry-core">/* Diffusion Lab — connected tape footprints and continuous containment.
+ * 基板の端部・LEDの回転した角・接続区間を、幅のある面として判定する。 */
+(function(root){
+'use strict';
+const EPS=1e-7,cache=new WeakMap();
+const cross=(a,b)=>a[0]*b[1]-a[1]*b[0];
+const box=p=>({minX:Math.min(...p.map(q=>q[0])),maxX:Math.max(...p.map(q=>q[0])),minY:Math.min(...p.map(q=>q[1])),maxY:Math.max(...p.map(q=>q[1]))});
+const overlaps=(a,b)=>a.minX<=b.maxX&&a.maxX>=b.minX&&a.minY<=b.maxY&&a.maxY>=b.minY;
+function square(x,y,size,angle){const c=Math.cos(angle),s=Math.sin(angle);return [[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>[x+(a*c-b*s)*size/2,y+(a*s+b*c)*size/2]);}
+function footprints(s,points){
+ const packageSize=Number(s.packageSize),tapeWidth=s.tapeWidth===undefined?packageSize+2:Number(s.tapeWidth);
+ if(!Number.isFinite(packageSize)||packageSize<=0||!Number.isFinite(tapeWidth)||tapeWidth<=0||!Array.isArray(points))throw Error('LEDテープの幅または座標が不正です。');
+ const tapes=[],packages=[];
+ for(let i=0;i<points.length;i++){
+  const p=points[i];if(!Array.isArray(p)||p.length<2||!Number.isFinite(p[0])||!Number.isFinite(p[1])||(p[2]!==undefined&&!Number.isFinite(p[2])))throw Error('LEDテープの座標が不正です。');
+  const [x,y]=p,angle=p[2]||0;tapes.push(square(x,y,tapeWidth,angle));packages.push(square(x,y,packageSize,angle));
+  if(i){const q=points[i-1],dx=x-q[0],dy=y-q[1],length=Math.hypot(dx,dy);
+   if(length>EPS){const ox=-dy/length*tapeWidth/2,oy=dx/length*tapeWidth/2;tapes.push([[q[0]+ox,q[1]+oy],[q[0]-ox,q[1]-oy],[x-ox,y-oy],[x+ox,y+oy]]);}
+  }
+ }
+ return {tapes,packages};
+}
+function tree(edges){
+ if(!edges.length)return null;const bounds={minX:Infinity,maxX:-Infinity,minY:Infinity,maxY:-Infinity};
+ for(const e of edges){bounds.minX=Math.min(bounds.minX,e.bounds.minX);bounds.maxX=Math.max(bounds.maxX,e.bounds.maxX);bounds.minY=Math.min(bounds.minY,e.bounds.minY);bounds.maxY=Math.max(bounds.maxY,e.bounds.maxY);}
+ if(edges.length<=8)return {bounds,edges};
+ const axis=bounds.maxX-bounds.minX>=bounds.maxY-bounds.minY?'X':'Y',sorted=edges.slice().sort((a,b)=>a.bounds['min'+axis]+a.bounds['max'+axis]-b.bounds['min'+axis]-b.bounds['max'+axis]),mid=sorted.length>>1;
+ return {bounds,left:tree(sorted.slice(0,mid)),right:tree(sorted.slice(mid))};
+}
+function query(node,bounds,out=[]){if(!node||!overlaps(node.bounds,bounds))return out;if(node.edges){for(const e of node.edges)if(overlaps(e.bounds,bounds))out.push(e);}else{query(node.left,bounds,out);query(node.right,bounds,out);}return out;}
+function geometry(O,s){
+ if(!O||typeof O.shapeInfo!=='function')throw Error('輪郭の計算モジュールが必要です。');
+ const key=JSON.stringify([s.shape,s.width,s.height,s.radius,s.hole,s.polygon,s.svgShapes]),stored=cache.get(O);
+ if(stored&&stored.key===key)return stored.value;
+ const value={kind:s.shape,a:s.width/2,b:s.height/2,radius:s.radius||0,hole:s.hole||0,boundary:[]};
+ if(s.shape==='svg')value.boundary=O.svgGeometry(s).boundary;
+ else if(s.shape==='polygon'){const p=O.shapeInfo(s).poly;value.boundary=p.map((a,i)=>[a,p[(i+1)%p.length]]);}
+ else if(!['rect','rounded','ellipse','ring'].includes(s.shape))throw Error('対応していない輪郭です。');
+ if(value.boundary.length){
+  value.edges=value.boundary.map(([a,b])=>({a,b,bounds:box([a,b])}));value.tree=tree(value.edges);
+  value.minY=value.tree.bounds.minY;value.maxY=value.tree.bounds.maxY;value.buckets=Array.from({length:Math.min(64,Math.max(8,Math.ceil(Math.sqrt(value.edges.length))))},()=>[]);
+  value.row=y=>Math.max(0,Math.min(value.buckets.length-1,Math.floor((y-value.minY)/(value.maxY-value.minY||1)*value.buckets.length)));
+  for(const e of value.edges)for(let i=value.row(e.bounds.minY);i<=value.row(e.bounds.maxY);i++)value.buckets[i].push(e);
+ }
+ cache.set(O,{key,value});return value;
+}
+function pointSegmentDistance(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],length=dx*dx+dy*dy,t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(length||1)));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);}
+function pointInside(p,g){
+ const x=p[0],y=p[1],bounds=g.tree.bounds;if(x<bounds.minX-EPS||x>bounds.maxX+EPS||y<bounds.minY-EPS||y>bounds.maxY+EPS)return false;
+ let inside=false;const candidates=g.buckets[g.row(y)];
+ for(const {a,b,bounds} of candidates){
+  if(x>=bounds.minX-EPS&&x<=bounds.maxX+EPS&&y>=bounds.minY-EPS&&y<=bounds.maxY+EPS&&pointSegmentDistance(p,a,b)<=EPS)return true;
+  if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+ }
+ return inside;
+}
+// 境界線分を凸矩形の厳密な内部へクリップする。辺・角への接触だけは許す。
+// 穴の全体を覆った場合も、その境界が矩形内部にあるので検出できる。
+function boundaryEnters(polygon,a,b){
+ let low=0,high=1;const delta=[b[0]-a[0],b[1]-a[1]],length=Math.hypot(...delta);if(length<=EPS)return false;
+ for(let i=0;i<polygon.length;i++){
+  const p=polygon[i],q=polygon[(i+1)%polygon.length],edge=[q[0]-p[0],q[1]-p[1]],n=Math.hypot(...edge);if(n<=EPS)continue;
+  const start=cross(edge,[a[0]-p[0],a[1]-p[1]])/n,slope=cross(edge,delta)/n;
+  if(Math.abs(slope)<1e-14){if(start<=EPS)return false;continue;}
+  const t=(EPS-start)/slope;if(slope>0)low=Math.max(low,t);else high=Math.min(high,t);if(high<=low)return false;
+ }
+ return (high-low)*length>EPS;
+}
+function segmentsIntersect(a,b,c,d){
+ const r=[b[0]-a[0],b[1]-a[1]],s=[d[0]-c[0],d[1]-c[1]],den=cross(r,s),q=[c[0]-a[0],c[1]-a[1]];
+ if(Math.abs(den)>1e-14){const t=cross(q,s)/den,u=cross(q,r)/den;return t>=0&&t<=1&&u>=0&&u<=1;}
+ return Math.min(pointSegmentDistance(a,c,d),pointSegmentDistance(b,c,d),pointSegmentDistance(c,a,b),pointSegmentDistance(d,a,b))<=EPS;
+}
+function segmentDistance(a,b,c,d){return segmentsIntersect(a,b,c,d)?0:Math.min(pointSegmentDistance(a,c,d),pointSegmentDistance(b,c,d),pointSegmentDistance(c,a,b),pointSegmentDistance(d,a,b));}
+function polygonContained(p,g,clearance){
+ const center=p.reduce((n,q)=>[n[0]+q[0]/p.length,n[1]+q[1]/p.length],[0,0]);
+ if(!p.every(q=>pointInside(q,g))||!pointInside(center,g))return false;
+ const bounds=box(p),expanded={minX:bounds.minX-clearance-EPS,maxX:bounds.maxX+clearance+EPS,minY:bounds.minY-clearance-EPS,maxY:bounds.maxY+clearance+EPS};
+ for(const {a,b} of query(g.tree,expanded)){
+  if(boundaryEnters(p,a,b))return false;
+  if(clearance>EPS)for(let i=0;i<p.length;i++)if(segmentDistance(p[i],p[(i+1)%p.length],a,b)<clearance-EPS)return false;
+ }
+ return true;
+}
+function minimumRadius(p,a,b){
+ const q=p.map(v=>[v[0]/a,v[1]/b]);let originInside=true,min=Infinity;
+ for(let i=0;i<q.length;i++){
+  const u=q[i],v=q[(i+1)%q.length];if(cross([v[0]-u[0],v[1]-u[1]],[-u[0],-u[1]])<0)originInside=false;
+  min=Math.min(min,pointSegmentDistance([0,0],u,v));
+ }
+ return originInside?0:min;
+}
+function standardContained(p,g,clearance){
+ if(g.kind==='rect')return p.every(([x,y])=>Math.abs(x)<=g.a-clearance+EPS&&Math.abs(y)<=g.b-clearance+EPS);
+ if(g.kind==='rounded')return p.every(([x,y])=>{const qx=Math.abs(x)-(g.a-g.radius),qy=Math.abs(y)-(g.b-g.radius);return Math.hypot(Math.max(qx,0),Math.max(qy,0))+Math.min(Math.max(qx,qy),0)-g.radius<=-clearance+EPS;});
+ // 楕円のclearanceは最短半径で一様に縮小する安全側の判定。
+ // 穴は同じ方法で拡大する。細長い楕円では実際の等距離オフセットより保守的。
+ const scale=1-clearance/Math.min(g.a,g.b);if(scale<=0)return false;
+ const outerA=g.a*scale,outerB=g.b*scale,tolerance=EPS/Math.max(outerA,outerB);
+ if(!p.every(([x,y])=>Math.hypot(x/outerA,y/outerB)<=1+tolerance))return false;
+ if(g.kind==='ring'){
+  const innerA=g.a*g.hole,innerB=g.b*g.hole,enlarge=1+clearance/Math.min(innerA,innerB),a=innerA*enlarge,b=innerB*enlarge;
+  if(minimumRadius(p,a,b)<1-EPS/Math.max(a,b))return false;
+ }
+ return true;
+}
+function contains(O,s,points,clearance=0){
+ if(!Number.isFinite(clearance)||clearance<0)return false;
+ try{const polygons=footprints(s,points),g=geometry(O,s);return [...polygons.tapes,...polygons.packages].every(p=>g.boundary.length?polygonContained(p,g,clearance):standardContained(p,g,clearance));}catch{return false;}
+}
+const api={footprints,contains,geometry,EPS};root.TapeGeometry=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+})(typeof self!=='undefined'?self:globalThis);
+</script><script id="tape-placement-core">/* LEDテープの自動配置。輪郭からはみ出す接続を別テープへ分割する。 */
+(function(root){
+'use strict';
+const PI=Math.PI,MAX_LEDS=5000,MAX_CANDIDATES=15000;
+function width(s){return Number.isFinite(s.tapeWidth)?s.tapeWidth:s.packageSize+2;}
+function fit(O,s,points){
+ if(typeof O.tapeFits!=='function')throw Error('LEDテープの連続輪郭判定が利用できません。');
+ return O.tapeFits(s,points,0);
+}
+function ensureLimit(n){if(n>MAX_CANDIDATES)throw Error('LED数が多すぎます。密度または列間隔を調整してください。');}
+function copy(p){return [p[0],p[1],p[2]||0];}
+function signedArea(points){let area=0;for(let i=0;i<points.length;i++){const a=points[i],b=points[(i+1)%points.length];area+=a[0]*b[1]-a[1]*b[0];}return area/2;}
+// SVG境界は塗り領域が左側。穴の時計回り境界も同じ向きへオフセットする。
+// 凹部ごとにオフセットするため、全体の幅・高さの縮小で細い腕を失わない。
+function insetLoop(points,distance,filledLeft=false){
+ if(points.length<3)return [];
+ const direction=filledLeft||signedArea(points)>=0?1:-1,out=[];
+ for(let i=0;i<points.length;i++){
+  const a=points[(i+points.length-1)%points.length],p=points[i],b=points[(i+1)%points.length],l0=Math.hypot(p[0]-a[0],p[1]-a[1]),l1=Math.hypot(b[0]-p[0],b[1]-p[1]);
+  if(l0<1e-9||l1<1e-9)continue;
+  const n0=[-(p[1]-a[1])/l0*direction,(p[0]-a[0])/l0*direction],n1=[-(b[1]-p[1])/l1*direction,(b[0]-p[0])/l1*direction],den=1+n0[0]*n1[0]+n0[1]*n1[1];
+  if(den>1e-6){const dx=distance*(n0[0]+n1[0])/den,dy=distance*(n0[1]+n1[1])/den;
+   if(Math.hypot(dx,dy)<=Math.max(distance*12,1)){out.push([p[0]+dx,p[1]+dy]);continue;}
+  }
+  // 鋭い折り返しは無制限のミターではなく両側の点を使い、後で幅を判定する。
+  out.push([p[0]+n0[0]*distance,p[1]+n0[1]*distance],[p[0]+n1[0]*distance,p[1]+n1[1]*distance]);
+ }
+ return out;
+}
+function perimeterGroups(O,s,margin,pitch){
+ if(s.shape==='ellipse'||s.shape==='ring'||s.shape==='rounded')margin=Math.max(margin,width(s)/Math.SQRT2,s.packageSize/Math.SQRT2);
+ if(s.width<=2*margin||s.height<=2*margin)return [];
+ if(s.shape==='svg')return O.svgGeometry(s).loops.map(loop=>({points:O.samplePath(insetLoop(loop,margin,true),pitch,true),closed:true}));
+ if(s.shape==='polygon')return [{points:O.samplePath(insetLoop(O.outline(s),margin),pitch,true),closed:true}];
+ // 円・角丸は既存の寸法/半径オフセットを保ち、曲線の局所ミター誤差を避ける。
+ const smaller={...s,width:s.width-2*margin,height:s.height-2*margin,radius:Math.max(0,s.radius-margin)};
+ return [{points:O.samplePath(O.outline(smaller),pitch,true),closed:true}];
+}
+function candidateGroups(O,s,pitch,margin){
+ const rot=s.rotation*PI/180,ca=Math.cos(rot),sa=Math.sin(rot);
+ if(s.layout==='ring'){
+  // 曲線では端部正方形の角も外周内に残るよう、半対角長を最低余白にする。
+  margin=Math.max(margin,width(s)/Math.SQRT2,s.packageSize/Math.SQRT2);
+  const a=s.width/2-margin,b=s.height/2-margin;if(a<=0||b<=0)return [];
+  const points=Array.from({length:720},(_,i)=>{const t=2*PI*i/720;return [a*Math.cos(t),b*Math.sin(t)];});
+  return [{points:O.samplePath(points,pitch,true),closed:true}];
+ }
+ if(s.layout==='perimeter')return perimeterGroups(O,s,margin,pitch);
+ if(s.layout!=='rows'&&s.layout!=='grid')throw Error('自動配置の種類を選択してください。');
+ const spacing=s.layout==='grid'?pitch:s.rowSpacing,extent=Math.hypot(s.width,s.height)/2;
+ if(Math.ceil(2*extent/pitch)*Math.ceil(2*extent/spacing)>90000)throw Error('配置候補が多すぎます。LED密度を下げてください。');
+ const ny=s.layout==='rows'&&s.tapeCount?s.tapeCount:Math.max(1,Math.floor((s.height-2*margin)/spacing)+1),nx=Math.max(1,Math.floor((s.width-2*margin)/pitch)+1);
+ ensureLimit(nx*ny);const rows=[];
+ for(let j=0;j<ny;j++){
+  const points=[];for(let i=0;i<nx;i++){const x=(i-(nx-1)/2)*pitch,y=(j-(ny-1)/2)*spacing;points.push([x*ca-y*sa,x*sa+y*ca,rot]);}
+  if(j%2)points.reverse();rows.push({points,closed:false});
+ }
+ return s.layout==='rows'?rows:[{points:rows.flatMap(row=>row.points),closed:false}];
+}
+// 元の接続順を歩き、無効LEDと輪郭を跨ぐブリッジで切る。削除後の再接続はしない。
+function splitGroup(O,s,source){
+ const groups=[];let current=[],discarded=0,broken=false;
+ for(const point of source.points){
+  if(!fit(O,s,[point])){if(current.length){groups.push(current);current=[];}discarded++;broken=true;continue;}
+  if(current.length&&!fit(O,s,[current[current.length-1],point])){groups.push(current);current=[];broken=true;}
+  current.push(copy(point));
+ }
+ if(current.length)groups.push(current);
+ if(source.closed&&source.points.length){
+  const first=source.points[0],last=source.points[source.points.length-1];
+  if(!fit(O,s,[last,first]))broken=true;
+  // 有効な閉路の継ぎ目で分かれた先頭・末尾を再び一つの連続列にする。
+  // 無効部分を飛ばす接続とは異なり、ここは元の隣接関係そのもの。
+  if(groups.length>1&&fit(O,s,[first])&&fit(O,s,[last])&&fit(O,s,[last,first])){
+   groups[0]=groups.pop().concat(groups[0]);
+  }
+ }
+ const splitCount=source.closed?(broken?groups.length:0):Math.max(0,groups.length-1);
+ return {groups,discarded,splitCount};
+}
+function generate(O,s){
+ const pitch=1000/s.density,margin=Math.max(s.inset,s.packageSize/2,width(s)/2);
+ if(!Number.isFinite(pitch)||pitch<=0)throw Error('LED密度には正の数値を指定してください。');
+ if(s.layout==='path'){
+  const path=O.parsePoints(s.path),points=O.samplePath(path,pitch);
+  if(path.length<2)throw Error('テープ経路には2点以上の座標が必要です。');
+  // 元の折線の角に加え、LED間の直線接続も判定する。危険な経路を自動切断しない。
+  if(!fit(O,s,path)||!fit(O,s,points))throw Error('テープ経路全体とテープ幅が輪郭内に収まるように経路を調整してください。切り欠き・穴を跨ぐ経路は配置できません。');
+  return {manual:points.map(copy),tapeLengths:points.length?[points.length]:[],discarded:0,pitch,splitCount:0};
+ }
+ const sources=candidateGroups(O,s,pitch,margin);ensureLimit(sources.reduce((n,g)=>n+g.points.length,0));
+ const groups=[];let discarded=0,splitCount=0;
+ for(const source of sources){const part=splitGroup(O,s,source);groups.push(...part.groups);discarded+=part.discarded;splitCount+=part.splitCount;}
+ const manual=groups.flat();if(manual.length>MAX_LEDS)throw Error('LED数が5,000個を超えます。密度を下げてください。');
+ if(s.layout==='rows'&&s.tapeCount&&groups.length!==s.tapeCount)throw Error('指定本数の連続したテープが輪郭内に収まりません。切り欠き・穴による分割が必要な場合は本数を自動に戻し、手動配置へコピーして調整してください。');
+ return {manual,tapeLengths:groups.map(g=>g.length),discarded,pitch,splitCount};
+}
+const api={generate};if(typeof module==='object'&&module.exports)module.exports=api;else root.TapePlacement=api;
+})(typeof globalThis!=='undefined'?globalThis:this);
 </script><script id="solver-core">/* Diffusion Lab v1.0 — original planar RGB/photometric approximation.
  * No third-party runtime dependencies. See MODEL.md for assumptions. */
 (function (root) {
 'use strict';
 const Gaming=root.Gaming||(typeof require==='function'?require('./gaming.js'):null);
+const TapeGeometry=root.TapeGeometry||(typeof require==='function'?require('./tape-geometry.js'):null);
+const TapePlacement=root.TapePlacement||(typeof require==='function'?require('./tape-placement.js'):null);
 const PI=Math.PI, Y=[0.2126,0.7152,0.0722];
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // 出典の窓寸法と光学的な有効発光面は別物。未記載の値を製品仕様にしない。
@@ -92,7 +305,7 @@ const defaults={
  version:1,shape:'rounded',width:160,height:72,radius:10,hole:0.46,
  polygon:'50,2\n88,16\n98,50\n75,94\n25,94\n2,50\n12,16',
  svgShapes:[],svgLabel:'',
- layout:'rows',density:60,rowSpacing:24,inset:8,rotation:0,tapeCount:0,
+ layout:'rows',density:60,rowSpacing:24,inset:8,rotation:0,tapeCount:0,tapeWidth:8,
  path:'-65,18\n-65,-18\n0,-18\n0,18\n65,18\n65,-18',manual:[],tapeLengths:[],
  ledModel:'WS2812B',package:'custom',...profileValues(ledProfiles.WS2812B),splitRGB:false,
  brightness:20,
@@ -106,7 +319,7 @@ const defaults={
  customLabel:'未校正・比較用の仮定値'
 };
 const ENUMS={shape:['rect','rounded','ellipse','ring','polygon','svg'],layout:['rows','grid','perimeter','ring','path','manual'],ledModel:[...Object.keys(ledProfiles),'custom'],package:['5050','3535','2020','custom'],pattern:['solid','gradient','alternating','rainbow','rgb','gaming'],gamingScene:['rainbowWave','chase','breathe','cyberPulse'],renderMode:['2d','3d'],pwmMode:['raw','srgb'],material:['opal','strong','frost','clear','foam','custom'],tone:['compress','linear'],view:['appearance','heat','layout']};
-const RANGES={tapeCount:[0,100],gamingSpeed:[.1,3],gamingPhase:[0,1],cameraYaw:[-180,180],cameraPitch:[8,82],cameraZoom:[.5,2.5],width:[10,2000],height:[10,2000],radius:[0,1000],hole:[0.05,0.95],density:[1,1000],rowSpacing:[1,1000],inset:[0,1000],rotation:[-180,180],packageSize:[0.5,20],aperture:[0.05,20],angle:[10,175],mcdR:[0,200000],mcdG:[0,200000],mcdB:[0,200000],brightness:[0,100],gap:[0.25,300],thickness:[0.1,30],transmission:[0,100],diffuse:[0,100],spread:[0,5],roi:[0,500],exposure:[-6,6],whiteLevel:[1,1000000],ambient:[0,10000],target:[0,100]};
+const RANGES={tapeCount:[0,100],tapeWidth:[.1,100],gamingSpeed:[.1,3],gamingPhase:[0,1],cameraYaw:[-180,180],cameraPitch:[8,82],cameraZoom:[.5,2.5],width:[10,2000],height:[10,2000],radius:[0,1000],hole:[0.05,0.95],density:[1,1000],rowSpacing:[1,1000],inset:[0,1000],rotation:[-180,180],packageSize:[0.5,20],aperture:[0.05,20],angle:[10,175],mcdR:[0,200000],mcdG:[0,200000],mcdB:[0,200000],brightness:[0,100],gap:[0.25,300],thickness:[0.1,30],transmission:[0,100],diffuse:[0,100],spread:[0,5],roi:[0,500],exposure:[-6,6],whiteLevel:[1,1000000],ambient:[0,10000],target:[0,100]};
 function normalize(input={}) {
  const s={...defaults};
  for(const k in defaults) if(Object.prototype.hasOwnProperty.call(input,k)) s[k]=input[k];
@@ -120,6 +333,8 @@ function normalize(input={}) {
  const profile=ledProfiles[s.ledModel],preset=profile?profileValues(profile):null;
  if(preset)for(const [k,v] of Object.entries(preset))if(!Object.prototype.hasOwnProperty.call(input,k))s[k]=v;
  for(const k in RANGES){const v=Number(s[k]);s[k]=Number.isFinite(v)?clamp(v,...RANGES[k]):preset&&k in preset?preset[k]:defaults[k];}
+ // 幅がない旧設定は、従来の基板描画幅を引き継ぐ。新規設定の8 mmは調整用の仮値。
+ if(input.version===1&&!Object.prototype.hasOwnProperty.call(input,'tapeWidth'))s.tapeWidth=clamp(s.packageSize+2,.1,100);
  for(const k in ENUMS)if(!ENUMS[k].includes(s[k]))s[k]=defaults[k];
  s.tapeCount=Math.round(s.tapeCount);
  s.quality=[160,288,448].includes(Number(s.quality))?Number(s.quality):288;
@@ -279,6 +494,9 @@ function validTapeLengths(n,lengths){
  return Array.isArray(lengths)&&lengths.length&&lengths.every(v=>Number.isInteger(v)&&v>0)&&lengths.reduce((a,b)=>a+b,0)===n?lengths.slice():n?[n]:[];
 }
 function tapeRanges(layout){let start=0;return validTapeLengths(layout.manual.length,layout.tapeLengths).map((length,index)=>{const tape={index,start,length};start+=length;return tape;});}
+function tapeFootprints(s,points){return TapeGeometry.footprints(s,points);}
+function tapeFits(s,points,clearance=0){return TapeGeometry.contains(api,s,points,clearance);}
+function tapeDiagnostics(s,layout){const invalidTapes=[];for(const tape of tapeRanges(layout))if(!tapeFits(s,layout.manual.slice(tape.start,tape.start+tape.length)))invalidTapes.push(tape.index);return {invalidTapes};}
 function tapeLayout(s){
  if(s.layout==='manual')return {manual:s.manual.map(p=>p.slice()),tapeLengths:validTapeLengths(s.manual.length,s.tapeLengths)};
  const geo=makeLEDs(s);return {manual:geo.leds.map(p=>[p.x,p.y,p.angle]),tapeLengths:geo.tapeLengths};
@@ -287,43 +505,29 @@ function tapeLayout(s){
 function moveTape(s,layout,index,x,y){
  const tape=tapeRanges(layout)[index];if(!tape)throw Error('移動するテープを選択してください。');
  if(!Number.isFinite(x)||!Number.isFinite(y))throw Error('X・Yには数値を入力してください。');
- const anchor=layout.manual[tape.start],dx=x-anchor[0],dy=y-anchor[1],{inside}=shapeInfo(s);
+ const anchor=layout.manual[tape.start],dx=x-anchor[0],dy=y-anchor[1];
  const manual=layout.manual.map((p,i)=>i>=tape.start&&i<tape.start+tape.length?[p[0]+dx,p[1]+dy,p[2]||0]:p.slice());
  manual[tape.start][0]=x;manual[tape.start][1]=y;
- if(!manual.slice(tape.start,tape.start+tape.length).every(p=>inside(p[0],p[1],s.packageSize/2)))throw Error('テープ全体が輪郭内に収まる位置を指定してください。');
+ if(!tapeFits(s,manual.slice(tape.start,tape.start+tape.length)))throw Error('テープの幅・端部・LED間の接続が輪郭内に収まる位置を指定してください。');
  return {manual,tapeLengths:validTapeLengths(manual.length,layout.tapeLengths)};
 }
 function makeLEDs(s){
- const {inside}=shapeInfo(s),pitch=1000/s.density,margin=Math.max(s.inset,s.packageSize/2),rot=s.rotation*PI/180;let list=[];
- // 輪郭外の固定LEDも接続データに残す。計算には輪郭内のLEDだけを使う。
+ // 不正な輪郭は候補を全て除外する扱いにせず、読み込み・計算を拒否する。
+ shapeInfo(s);
+ const pitch=1000/s.density;
  if(s.layout==='manual'){
   if(s.manual.length>5000)throw Error('LED数が5,000個を超えます。');
-  const cols=ledColors(s,s.manual.length),all=[];
-  for(const tape of tapeRanges(s))for(let i=tape.start;i<tape.start+tape.length;i++){const p=s.manual[i];all.push({x:p[0],y:p[1],angle:p[2]||0,rgb:cols[i],index:i,tapeIndex:tape.index});}
-  const leds=all.filter(p=>inside(p.x,p.y));return {leds,tapeLengths:validTapeLengths(s.manual.length,s.tapeLengths),discarded:all.length-leds.length,pitch};
- }
- if(s.layout==='path')list=samplePath(parsePoints(s.path),pitch);
- else if(s.layout==='ring'){
-  const a=s.width/2-margin,b=s.height/2-margin;if(a>0&&b>0){let p=[];for(let i=0;i<720;i++){let t=2*PI*i/720;p.push([a*Math.cos(t),b*Math.sin(t)]);}list=samplePath(p,pitch,true);}
- }else if(s.layout==='perimeter'){
-  const w=s.width-2*margin,h=s.height-2*margin;if(w>0&&h>0){const smaller={...s,width:w,height:h,radius:Math.max(0,s.radius-margin)};
-   if(s.shape==='svg')svgGeometry(smaller).loops.forEach((contour,index)=>list.push(...samplePath(contour,pitch,true).map(p=>[...p,index])));
-   else list=samplePath(outline(smaller),pitch,true);
+  const cols=ledColors(s,s.manual.length),leds=[],invalidTapes=[];let discarded=0;
+  // 保存済みの不適合配置も接続と座標は保持する。群の一部を除いて再接続はしない。
+  for(const tape of tapeRanges(s)){
+   if(!tapeFits(s,s.manual.slice(tape.start,tape.start+tape.length))){invalidTapes.push(tape.index);discarded+=tape.length;continue;}
+   for(let i=tape.start;i<tape.start+tape.length;i++){const p=s.manual[i];leds.push({x:p[0],y:p[1],angle:p[2]||0,rgb:cols[i],index:i,tapeIndex:tape.index});}
   }
- }else{
-  const spacing=s.layout==='grid'?pitch:s.rowSpacing;
-  const extent=Math.hypot(s.width,s.height)/2;
-  if(Math.ceil(2*extent/pitch)*Math.ceil(2*extent/spacing)>90000)throw Error('配置候補が多すぎます。LED密度を下げてください。');
-  const ny=s.layout==='rows'&&s.tapeCount?s.tapeCount:Math.max(1,Math.floor((s.height-2*margin)/spacing)+1),nx=Math.max(1,Math.floor((s.width-2*margin)/pitch)+1);
-  if(nx*ny>15000)throw Error('LED数が多すぎます。密度または列間隔を調整してください。');
-  for(let j=0;j<ny;j++){const row=[];for(let i=0;i<nx;i++){let x=(i-(nx-1)/2)*pitch,y=(j-(ny-1)/2)*spacing;row.push([x*Math.cos(rot)-y*Math.sin(rot),x*Math.sin(rot)+y*Math.cos(rot),rot,s.layout==='rows'?j:0]);}if(j%2)row.reverse();list.push(...row);}
+  return {leds,tapeLengths:validTapeLengths(s.manual.length,s.tapeLengths),discarded,pitch,invalidTapes,splitCount:0};
  }
- const raw=list.length;list=list.filter(p=>inside(p[0],p[1],s.packageSize/2));
- if(list.length>5000)throw Error('LED数が5,000個を超えます。密度を下げてください。');
- const cols=ledColors(s,list.length),groups=new Map(),tapeLengths=[];
- const leds=list.map((p,i)=>{const id=p[3]||0;if(!groups.has(id)){groups.set(id,groups.size);tapeLengths.push(0);}const tapeIndex=groups.get(id);tapeLengths[tapeIndex]++;return {x:p[0],y:p[1],angle:p[2]||0,rgb:cols[i],index:i,tapeIndex};});
- if(s.layout==='rows'&&s.tapeCount&&tapeLengths.length!==s.tapeCount)throw Error('指定本数のテープが輪郭内に収まりません。板の寸法・列間隔を調整してください。');
- return {leds,tapeLengths,discarded:raw-list.length,pitch};
+ const layout=TapePlacement.generate(api,s),cols=ledColors(s,layout.manual.length),leds=[];
+ for(const tape of tapeRanges(layout))for(let i=tape.start;i<tape.start+tape.length;i++){const p=layout.manual[i];leds.push({x:p[0],y:p[1],angle:p[2]||0,rgb:cols[i],index:i,tapeIndex:tape.index});}
+ return {leds,tapeLengths:layout.tapeLengths,discarded:layout.discarded,pitch,splitCount:layout.splitCount,invalidTapes:[]};
 }
 const planCache=new Map();
 function plan(n){if(planCache.has(n))return planCache.get(n);const rev=new Uint32Array(n),cs=new Float64Array(n/2),sn=new Float64Array(n/2);for(let i=1,j=0;i<n;i++){let bit=n>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;rev[i]=j;}for(let i=0;i<n/2;i++){cs[i]=Math.cos(-2*PI*i/n);sn[i]=Math.sin(-2*PI*i/n);}const p={rev,cs,sn};planCache.set(n,p);return p;}
@@ -384,13 +588,14 @@ class Solver {
   if(!leds.length)warnings.push('計算対象のLEDがありません。配置条件を調整するか、テープ配置をコピーしてください。');
   const threeMax=ledProfiles[s.ledModel]?.photometry.threeChannelMax;
   if(threeMax&&leds.some(led=>led.rgb.every(v=>v>0)&&Math.max(...led.rgb)>threeMax/100+1e-9))warnings.push(`参照SK6812-012ではRGB3色同時点灯は${threeMax}%灰階で使用します（資料p.3）。現在その条件を超えるLEDがあります。計算は入力値のままです。`);
-  if(geo.discarded)warnings.push(s.layout==='manual'?`輪郭外のLED ${geo.discarded} 個は計算から除外しています。接続と座標は保持しているため、テープ全体を輪郭内に移動してください。`:`輪郭外または端に近いLED候補 ${geo.discarded} 個を除外しました。`);
+  if(geo.discarded)warnings.push(s.layout==='manual'?`幅・端部・接続が輪郭に収まらないテープ ${geo.invalidTapes.length} 本（${geo.discarded} LED）は群全体を計算から除外しています。接続と座標は保持しています。LED配置で移動・回転・幅を調整してください。`:`幅・LED外形が輪郭に収まらないLED候補 ${geo.discarded} 個を除外しました。`);
+  if(geo.splitCount)warnings.push(`切り欠きや穴を横断しないよう、自動配置を ${geo.tapeLengths.length} 本のテープに分けました（${geo.splitCount} か所で分割）。別のテープ間を基板で接続していません。`);
   if(Math.max(dx,dy)>s.gap/2)warnings.push('距離に対して計算格子が粗い条件です。高精細にするか、形状を小さくして再確認してください。');
   if(s.diffuse<99&&Math.max(dx,dy)>s.aperture/2)warnings.push('直接透過するLED像は格子解像度の影響を受けます。高精細で確認してください。');
   if(!stats.validROI)warnings.push('指定した端の除外幅では評価領域が残らないため、全面で集計しました。');
   if(s.diffuse<95)warnings.push('低拡散材の見え方は簡易的な正面直視モデルです。屈折・視差・レンズ像は再現しません。');
   if(s.shape==='ring'||s.shape==='ellipse')warnings.push('楕円輪郭の評価領域は、長短半径を除外幅だけ縮小・拡大した近似です。');
-  return {state:s,nx,ny,dx,dy,fields,irradiance,mask,roiMask,stats,leds,tapeLengths:geo.tapeLengths,pitch:geo.pitch,warnings,ms:Date.now()-start};
+  return {state:s,nx,ny,dx,dy,fields,irradiance,mask,roiMask,stats,leds,tapeLengths:geo.tapeLengths,pitch:geo.pitch,splitCount:geo.splitCount,invalidTapes:geo.invalidTapes,warnings,ms:Date.now()-start};
  }
 }
 function rgba(result,display={}){
@@ -405,7 +610,7 @@ function rgba(result,display={}){
   for(let c=0;c<3;c++)out[i*4+c]=clamp(rgb[c]*255,0,255);out[i*4+3]=255;
  }return out;
 }
-const api={defaults,ledProfiles,profileAperture,profileIntensity,selectLEDModel,ledDescription,luminousFlux,normalize,shapeInfo,svgGeometry,outline,parsePoints,makeLEDs,tapeLayout,tapeRanges,moveTape,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
+const api={defaults,ledProfiles,profileAperture,profileIntensity,selectLEDModel,ledDescription,luminousFlux,normalize,shapeInfo,svgGeometry,outline,parsePoints,makeLEDs,tapeLayout,tapeRanges,tapeFootprints,tapeFits,tapeDiagnostics,moveTape,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
 root.Optics=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof self!=='undefined'?self:globalThis);
 </script><script id="worker-source" type="text/plain">'use strict';
@@ -560,9 +765,10 @@ const rad=Math.PI/180;
 function copy(layout){return {manual:layout.manual.map(p=>p.slice()),tapeLengths:layout.tapeLengths.slice()};}
 function indices(O,layout,selected){const ranges=O.tapeRanges(layout);return selected===null?ranges.map(t=>t.index):selected;}
 function points(O,layout,selected){const wanted=new Set(indices(O,layout,selected));return O.tapeRanges(layout).filter(t=>wanted.has(t.index)).flatMap(t=>layout.manual.slice(t.start,t.start+t.length));}
-function bounds(O,s,layout,selected=null){const ps=points(O,layout,selected);if(!ps.length)throw Error('編集するLEDテープを選択してください。');let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
- for(const p of ps){const half=s.packageSize/2*(Math.abs(Math.cos(p[2]||0))+Math.abs(Math.sin(p[2]||0)));x0=Math.min(x0,p[0]-half);x1=Math.max(x1,p[0]+half);y0=Math.min(y0,p[1]-half);y1=Math.max(y1,p[1]+half);}return {x0,y0,x1,y1};}
-function validate(O,s,layout,selected=null){const inside=O.shapeInfo(s).inside;for(const p of points(O,layout,selected)){const half=s.packageSize/2*(Math.abs(Math.cos(p[2]||0))+Math.abs(Math.sin(p[2]||0)));if(!inside(p[0],p[1],half))throw Error('テープ全体が輪郭内に収まる位置・角度を指定してください。');}return layout;}
+function bounds(O,s,layout,selected=null){const wanted=new Set(indices(O,layout,selected));let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+ for(const tape of O.tapeRanges(layout)){if(!wanted.has(tape.index))continue;const footprints=O.tapeFootprints(s,layout.manual.slice(tape.start,tape.start+tape.length));for(const polygon of [...footprints.tapes,...footprints.packages])for(const p of polygon){x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1]);}}
+ if(!Number.isFinite(x0))throw Error('編集するLEDテープを選択してください。');return {x0,y0,x1,y1};}
+function validate(O,s,layout,selected=null){const wanted=new Set(indices(O,layout,selected));for(const tape of O.tapeRanges(layout))if(wanted.has(tape.index)&&!O.tapeFits(s,layout.manual.slice(tape.start,tape.start+tape.length)))throw Error('テープの幅・端部・LED間の接続が輪郭内に収まる位置・角度を指定してください。');return layout;}
 function rotation(O,layout,index){const tape=O.tapeRanges(layout)[index];if(!tape)throw Error('回転するLEDテープを選択してください。');return ((layout.manual[tape.start][2]/rad+180)%360+360)%360-180;}
 function rotate(O,s,layout,index,degrees){if(!Number.isFinite(degrees))throw Error('角度に数値を入力してください。');const tape=O.tapeRanges(layout)[index];if(!tape)throw Error('回転するLEDテープを選択してください。');const out=copy(layout),ps=points(O,layout,[index]),cx=ps.reduce((a,p)=>a+p[0],0)/ps.length,cy=ps.reduce((a,p)=>a+p[1],0)/ps.length,delta=(degrees-rotation(O,layout,index))*rad,c=Math.cos(delta),sn=Math.sin(delta);
  for(let i=tape.start;i<tape.start+tape.length;i++){const p=layout.manual[i],x=p[0]-cx,y=p[1]-cy;out.manual[i]=[cx+x*c-y*sn,cy+x*sn+y*c,(p[2]||0)+delta];}return validate(O,s,out,[index]);}
@@ -573,8 +779,15 @@ function overlaps(a,b){return a.x0<b.x1+1&&a.x1>b.x0-1&&a.y0<b.y1+1&&a.y1>b.y0-1
 function resize(O,s,layout,count,selected=-1){if(!Number.isInteger(count)||count<0||count>100)throw Error('LEDテープの本数は0〜100の整数で指定してください。');const out=copy(layout);if(!count)return {manual:[],tapeLengths:[]};
  if(count<out.tapeLengths.length){out.manual=out.manual.slice(0,out.tapeLengths.slice(0,count).reduce((a,b)=>a+b,0));out.tapeLengths=out.tapeLengths.slice(0,count);return out;}
  if(count===out.tapeLengths.length)return out;
- if(!out.manual.length){const auto=O.tapeLayout({...s,layout:'rows',tapeCount:1,rowSpacing:s.height*2,rotation:0});if(!auto.manual.length)throw Error('輪郭内に新しいテープを配置できません。');out.manual=auto.manual;out.tapeLengths=auto.tapeLengths;}
- const ranges=O.tapeRanges(out),source=ranges[selected]||ranges[ranges.length-1],original=out.manual.slice(source.start,source.start+source.length),single={manual:original,tapeLengths:[original.length]},bb=bounds(O,s,single),stepX=Math.max(s.packageSize+2,bb.x1-bb.x0+2),stepY=Math.max(s.packageSize+2,bb.y1-bb.y0+2),candidates=[];
+ if(!out.manual.length){
+  // 凹形の中央行が複数群に分かれても、最初の適合群を1本の種にする。
+  // 中央が穴・空白なら通常の列間隔で探し、輪郭を跨ぐ接続を作らない。
+  let auto=O.tapeLayout({...s,layout:'rows',tapeCount:0,rowSpacing:s.height*2,rotation:0});
+  if(!auto.manual.length)auto=O.tapeLayout({...s,layout:'rows',tapeCount:0,rotation:0});
+  const seed=O.tapeRanges(auto)[0];if(!seed)throw Error('輪郭内に新しいテープを配置できません。');
+  out.manual=auto.manual.slice(seed.start,seed.start+seed.length);out.tapeLengths=[seed.length];
+ }
+ const ranges=O.tapeRanges(out),source=ranges[selected]||ranges[ranges.length-1],original=out.manual.slice(source.start,source.start+source.length),single={manual:original,tapeLengths:[original.length]},bb=bounds(O,s,single),stepX=Math.max(s.tapeWidth,bb.x1-bb.x0+2),stepY=Math.max(s.tapeWidth,bb.y1-bb.y0+2),candidates=[];
  if(out.manual.length+(count-out.tapeLengths.length)*original.length>5000)throw Error('LED数が5,000個を超えます。');
  const nx=Math.min(100,Math.ceil(s.width/stepX)),ny=Math.min(100,Math.ceil(s.height/stepY));for(let j=-ny;j<=ny;j++)for(let i=-nx;i<=nx;i++)if(i||j)candidates.push([i*stepX,j*stepY]);candidates.sort((a,b)=>Math.hypot(...a)-Math.hypot(...b)||a[1]-b[1]||a[0]-b[0]);
  while(out.tapeLengths.length<count){const occupied=O.tapeRanges(out).map(t=>bounds(O,s,out,[t.index]));let added=false;
@@ -641,18 +854,22 @@ function orientedSquare(x,y,size,angle){const c=Math.cos(angle),s=Math.sin(angle
 function circle(x,y,r,n=12){return Array.from({length:n},(_,i)=>[x+r*Math.cos(i*2*PI/n),y+r*Math.sin(i*2*PI/n)]);}
 // 接続されたテープを基板の立体として作り、各LEDをその上面へ載せる。
 // 端部の基板も作るので、LEDが1個だけのテープも台座に接触する。
-function mountedTapeGeometry(result){
- const s=result.state,layers=layerHeights(s),leds=result.leds||[],tapeWidth=s.packageSize+2,tapes=[],packages=[];
+function mountedTapeGeometry(result,optics=root.Optics){
+ const s=result.state,layers=layerHeights(s),leds=result.leds||[],tapeWidth=Number.isFinite(s.tapeWidth)&&s.tapeWidth>0?s.tapeWidth:s.packageSize+2,tapes=[],packages=[];
+ const footprints=optics&&typeof optics.tapeFootprints==='function'?points=>optics.tapeFootprints({...s,tapeWidth},points):null;
  for(let i=0;i<leds.length;i++){
-  const led=leds[i],previous=leds[i-1],tapeIndex=led.tapeIndex??0,indices=[led.index??i];
-  tapes.push({polygon:orientedSquare(led.x,led.y,tapeWidth,led.angle||0),bottom:layers.tapeBottom,top:layers.tapeTop,tapeIndex,ledIndices:indices});
-  if(previous&&(previous.tapeIndex??0)===tapeIndex){
+  const led=leds[i],previous=leds[i-1],tapeIndex=led.tapeIndex??0,indices=[led.index??i],point=[led.x,led.y,led.angle||0],single=footprints?footprints([point]):null;
+  tapes.push({polygon:single?single.tapes[0]:orientedSquare(led.x,led.y,tapeWidth,led.angle||0),bottom:layers.tapeBottom,top:layers.tapeTop,tapeIndex,ledIndices:indices});
+  // 除外されたLEDの欠番を直線で補うと、SVGの切り欠きを横断してしまう。
+  // 同じテープで、元の配線順も連続している場合だけ基板を接続する。
+  if(previous&&(previous.tapeIndex??0)===tapeIndex&&(previous.index??i-1)+1===(led.index??i)){
    const dx=led.x-previous.x,dy=led.y-previous.y,len=Math.hypot(dx,dy);
    if(len>1e-8){const ox=-dy/len*tapeWidth/2,oy=dx/len*tapeWidth/2;
-    tapes.push({polygon:[[previous.x+ox,previous.y+oy],[previous.x-ox,previous.y-oy],[led.x-ox,led.y-oy],[led.x+ox,led.y+oy]],bottom:layers.tapeBottom,top:layers.tapeTop,tapeIndex,ledIndices:[previous.index??i-1,...indices]});
+    const joined=footprints?footprints([[previous.x,previous.y,previous.angle||0],point]):null;
+    tapes.push({polygon:joined?joined.tapes.at(-1):[[previous.x+ox,previous.y+oy],[previous.x-ox,previous.y-oy],[led.x-ox,led.y-oy],[led.x+ox,led.y+oy]],bottom:layers.tapeBottom,top:layers.tapeTop,tapeIndex,ledIndices:[previous.index??i-1,...indices]});
    }
   }
-  packages.push({polygon:orientedSquare(led.x,led.y,s.packageSize,led.angle||0),bottom:layers.packageBottom,top:layers.packageTop,light:circle(led.x,led.y,s.aperture/2),led});
+  packages.push({polygon:single?single.packages[0]:orientedSquare(led.x,led.y,s.packageSize,led.angle||0),bottom:layers.packageBottom,top:layers.packageTop,light:circle(led.x,led.y,s.aperture/2),led});
  }
  return {layers,tapes,packages};
 }
@@ -671,7 +888,7 @@ function render(ctx,result,options={}){
  }
  // テープ底面を台座に接触させ、基板の厚みとLEDパッケージの高さを描く。
  if(showLED){
-  const mounted=mountedTapeGeometry(result),dir=camera.direction;
+  const mounted=mountedTapeGeometry(result,options.optics||root.Optics),dir=camera.direction;
   function prism(part,topColor,sideColor,kind){
    face(part.polygon.map(p=>[...p,part.top]),p=>filled(ctx,p,topColor,kind==='led'?'#ffffff38':'#a8afbc24'),kind);
    for(let i=0;i<part.polygon.length;i++){
@@ -749,7 +966,7 @@ function error(text){$('errorBanner').textContent=text;$('errorBanner').hidden=!
 function format(n,dec=1){if(n===null||!Number.isFinite(n))return '—';return n.toLocaleString('ja-JP',{maximumFractionDigits:dec,minimumFractionDigits:dec});}
 function metric(el,value,unit){const box=$(el);box.textContent=value;const sm=document.createElement('small');sm.textContent=unit;box.appendChild(sm);}
 function status(text,kind=''){const box=$('status');box.className='status '+kind;$('statusText').textContent=text;}
-function createWorker(){const content=$('gaming-core').textContent+'\n'+$('solver-core').textContent+'\n'+$('worker-source').textContent;const url=URL.createObjectURL(new Blob([content],{type:'text/javascript'}));let w=new Worker(url);URL.revokeObjectURL(url);return w;}
+function createWorker(){const content=['gaming-core','tape-geometry-core','tape-placement-core','solver-core','worker-source'].map(id=>$(id).textContent).join('\n');const url=URL.createObjectURL(new Blob([content],{type:'text/javascript'}));let w=new Worker(url);URL.revokeObjectURL(url);return w;}
 function gamingActive(){return state.pattern==='gaming'&&state.gamingPlaying;}
 function gamingCacheKey(){const s={...state};for(const k of [...displayKeys,'gamingPhase','gamingPlaying','gamingSpeed','quality'])delete s[k];return JSON.stringify(s);}
 function syncGaming(){
@@ -865,6 +1082,10 @@ function syncLEDSpec(){
 }
 function applyChange(key,value){
  cancelTapeDrag();
+ if(key==='path'){
+  try{O.makeLEDs(O.normalize({...state,layout:'path',path:value}));}
+  catch(e){const input=document.querySelector('[data-key="path"]');input.setAttribute('aria-invalid','true');$('tapeOutlineStatus').textContent=e.message+' 元の経路を保持しています。';$('tapeOutlineStatus').classList.add('invalid');return false;}
+ }
  const previous=state.layout;
  if(key==='layout'&&value==='manual'&&previous!=='manual'){try{lastAutoLayout=O.tapeLayout(state);Object.assign(state,structuredClone(lastAutoLayout));}catch(e){toast(e.message);return;}}
  if(key==='ledModel'){state=O.selectLEDModel(state,value);state.showLED=true;}
@@ -880,8 +1101,9 @@ function applyChange(key,value){
  if(key==='view'&&value!=='layout')tapeMode='move';
  if(state.layout!=='path'||state.view!=='layout'){drawingPath=false;pathDraft=[];}
  state=O.normalize(state);persist();syncControls();
- if(displayKeys.has(key)){renderAll();return;}
+ if(displayKeys.has(key)){renderAll();return true;}
  clearSweepForChange();drawSection();if(state.view==='layout')drawMain();requestCompute(key==='polygon'||key==='path'?550:140);
+ return true;
 }
 $('ledPresetBtn').addEventListener('click',()=>applyChange('ledModel',state.ledModel));
 for(const el of document.querySelectorAll('[data-key]')){
@@ -927,8 +1149,10 @@ function drawGrid(ctx,w,h,s,m){
 function drawDimensions(ctx,s,m){if(!state.showGrid)return;const y=m.y-17,x=m.x-18;ctx.strokeStyle='#67718a88';ctx.fillStyle='#8590aa';ctx.lineWidth=1;ctx.font='10px ui-monospace,Consolas,monospace';ctx.textAlign='center';ctx.beginPath();ctx.moveTo(m.x,y);ctx.lineTo(m.x+m.w,y);for(const xx of [m.x,m.x+m.w]){ctx.moveTo(xx,y-4);ctx.lineTo(xx,y+4);}ctx.stroke();ctx.fillText(format(s.width,0)+' mm',m.ox,y-7);ctx.beginPath();ctx.moveTo(x,m.y);ctx.lineTo(x,m.y+m.h);for(const yy of [m.y,m.y+m.h]){ctx.moveTo(x-4,yy);ctx.lineTo(x+4,yy);}ctx.stroke();ctx.save();ctx.translate(x-8,m.oy);ctx.rotate(-Math.PI/2);ctx.fillText(format(s.height,0)+' mm',0,0);ctx.restore();ctx.textAlign='left';}
 function drawLEDs(ctx,leds,s,m,overlay=false){
  if(!overlay&&leds.length){
-  ctx.strokeStyle='#9aa6b11b';ctx.lineWidth=Math.max(2,(s.packageSize+2)*m.scale);ctx.lineCap='round';
-  ctx.beginPath();let prev=null;for(const p of leds){if(prev&&prev.tapeIndex===p.tapeIndex)ctx.lineTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale);else ctx.moveTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale);prev=p;}ctx.stroke();
+  const groups=new Map();for(const p of leds){if(!groups.has(p.tapeIndex))groups.set(p.tapeIndex,[]);groups.get(p.tapeIndex).push([p.x,p.y,p.angle]);}
+  for(const [index,points] of groups){const invalid=!O.tapeFits(s,points),footprints=O.tapeFootprints(s,points);ctx.fillStyle=invalid?'#ff718849':index===selectedTape?'#71e5cf35':'#9aa6b126';ctx.strokeStyle=invalid?'#ff7188':index===selectedTape?'#71e5cf':'#9aa6b147';ctx.lineWidth=1;
+   for(const polygon of footprints.tapes){ctx.beginPath();polygon.forEach((p,i)=>i?ctx.lineTo(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale):ctx.moveTo(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale));ctx.closePath();ctx.fill();ctx.stroke();}
+  }
   const selected=leds.filter(p=>p.tapeIndex===selectedTape);ctx.strokeStyle='#71e5cf';ctx.lineWidth=2;
   ctx.beginPath();selected.forEach((p,i)=>i?ctx.lineTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale):ctx.moveTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale));ctx.stroke();
   for(const p of selected){const bs=Math.max(2,s.packageSize*m.scale)+6;ctx.save();ctx.translate(m.ox+p.x*m.scale,m.oy+p.y*m.scale);ctx.rotate(p.angle);ctx.strokeRect(-bs/2,-bs/2,bs,bs);ctx.restore();}
@@ -1016,12 +1240,23 @@ function syncTapeEditor(){
  for(const id of ['tapeX','tapeY','applyTapePosition','tapeAngle','applyTapeAngle'])$(id).disabled=disabled;
  $('convertManual').disabled=!lastAutoLayout.manual.length||!!dragTape;$('clearManual').disabled=!state.manual.length||!!dragTape;
  $('tapeCount').value=tapes.length;$('applyTapeCount').disabled=!!dragTape||drawingPath;
- $('tapeCount').disabled=!!dragTape||drawingPath;
+ $('tapeCount').disabled=!!dragTape||drawingPath;$('autoTapeCount').disabled=!!dragTape||drawingPath;
  $('tapeAngle').value=tape?Number(TapeTools.rotation(O,layout,selectedTape).toFixed(2)):'';
  document.querySelectorAll('[data-align]').forEach(btn=>btn.disabled=!!dragTape||drawingPath||!tapes.length||($('alignScope').value==='selected'&&!tape));
  const anchor=tape?layout.manual[tape.start]:null;
  $('tapeX').value=anchor?Number(anchor[0].toFixed(3)):'';$('tapeY').value=anchor?Number(anchor[1].toFixed(3)):'';
  tapeMessage(drawingPath?'経路を確定するとテープを移動できます。':tape?`${tape.length} LEDを接続したまま${tapeMode==='rotate'?'回転':'移動'}します。`:'画面上のテープ、または上の一覧から選択してください。');
+ syncTapeOutline();
+}
+function syncTapeOutline(){
+ const box=$('tapeOutlineStatus');let invalid=false,text;
+ try{
+  if(state.layout==='manual'){
+   const layout=editorLayout(),diagnostics=O.tapeDiagnostics(state,layout);invalid=!!diagnostics.invalidTapes.length;
+   text=invalid?`幅 ${state.tapeWidth} mm：テープ ${diagnostics.invalidTapes.map(i=>i+1).join('・')} が輪郭に収まりません。座標と接続は保持し、群全体を光学計算から除外します。赤い基板を移動・回転または幅調整してください。`:`幅 ${state.tapeWidth} mm：${layout.tapeLengths.length} 本の端部・LED間の接続まで輪郭内です。`;
+  }else{const geo=O.makeLEDs(state);text=`幅 ${state.tapeWidth} mm：${geo.tapeLengths.length} 本を配置。`+(geo.splitCount?`切り欠き・穴を避けて ${geo.splitCount} か所で分割しています。各本は別の基板です。`:'基板の端部・LED間の接続まで輪郭内です。');}
+ }catch(e){invalid=true;text=e.message;}
+ box.textContent=text;box.classList.toggle('invalid',invalid);
 }
 function cancelTapeDrag(){
  if(!dragTape)return;const id=dragTape.pointerId;dragTape=null;if($('mainCanvas').hasPointerCapture(id))$('mainCanvas').releasePointerCapture(id);toggleExport();
@@ -1043,14 +1278,15 @@ function applyTapeCount(){
  try{if(!$('tapeCount').value.trim()||!Number.isInteger(count)||count<1||count>100)throw Error('LEDテープの本数は1〜100の整数で指定してください。');
   if(count===layout.tapeLengths.length){$('tapeCountStatus').textContent='現在の本数と同じです。';return;}
   if(state.layout==='rows'){
-   const available=state.height-2*Math.max(state.inset,state.packageSize/2),spacing=count>1?Math.min(state.rowSpacing,available/(count-1)):state.rowSpacing;
-   if(spacing<state.packageSize+1&&count>1)throw Error('指定本数を並べる幅がありません。板を広げるか、本数を減らしてください。');
+   const available=state.height-2*Math.max(state.inset,state.packageSize/2,state.tapeWidth/2),spacing=count>1?Math.min(state.rowSpacing,available/(count-1)):state.rowSpacing;
+   if(spacing<Math.max(state.packageSize,state.tapeWidth)+1&&count>1)throw Error('指定本数を並べる幅がありません。板を広げるか、本数を減らしてください。');
    const next=O.normalize({...state,tapeCount:count,rowSpacing:spacing});O.makeLEDs(next);resetTapeEditor();state=next;persist();syncControls();clearSweepForChange();drawMain();requestCompute(0);
   }else commitTapeLayout(TapeTools.resize(O,state,layout,count,selectedTape));
   $('tapeCountStatus').textContent=`LEDテープを${count}本にしました。`;$('tapeCount').setAttribute('aria-invalid','false');
  }catch(e){$('tapeCountStatus').textContent=e.message;$('tapeCount').setAttribute('aria-invalid','true');}
 }
 $('applyTapeCount').addEventListener('click',applyTapeCount);$('tapeCount').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyTapeCount();}});
+$('autoTapeCount').addEventListener('click',()=>{resetTapeEditor();applyChange('tapeCount',0);$('tapeCountStatus').textContent='本数を自動に戻しました。切り欠き・穴を避け、収まる部分を別のテープとして配置します。';});
 function applyTapeAngle(){try{if(!$('tapeAngle').value.trim())throw Error('角度を入力してください。');const degrees=Number($('tapeAngle').value);if(degrees<-180||degrees>180)throw Error('角度は−180〜180°で指定してください。');commitTapeLayout(TapeTools.rotate(O,state,editorLayout(),selectedTape,degrees));}catch(e){tapeMessage(e.message,true);}}
 $('applyTapeAngle').addEventListener('click',applyTapeAngle);$('tapeAngle').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyTapeAngle();}});
 $('alignScope').addEventListener('change',syncTapeEditor);
@@ -1122,7 +1358,7 @@ $('mainCanvas').addEventListener('pointercancel',discardTapeDrag);$('mainCanvas'
 $('convertManual').addEventListener('click',()=>{selectedTape=-1;commitTapeLayout(structuredClone(lastAutoLayout));});
 $('clearManual').addEventListener('click',()=>{selectedTape=-1;commitTapeLayout({manual:[],tapeLengths:[]});});
 $('pathDrawBtn').addEventListener('click',()=>{applyChange('view','layout');drawingPath=true;pathDraft=[];syncTapeEditor();drawMain();toast('輪郭内をクリックして経路の点を追加します。Enterで確定、Escapeで取り消します。');});
-function finishPath(){if(!drawingPath)return;if(pathDraft.length<2){toast('経路には2点以上が必要です。');return;}drawingPath=false;applyChange('path',pathDraft.map(p=>p.join(',')).join('\n'));pathDraft=[];drawMain();}
+function finishPath(){if(!drawingPath)return;if(pathDraft.length<2){toast('経路には2点以上が必要です。');return;}const path=pathDraft.map(p=>p.join(',')).join('\n');if(!applyChange('path',path)){toast('テープ幅を含めて輪郭内に収まる経路を指定してください。Escapeで描画を取り消せます。');return;}drawingPath=false;pathDraft=[];syncTapeEditor();drawMain();}
 $('pathFinishBtn').addEventListener('click',finishPath);
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){if(orbit)finishOrbit({pointerId:orbit.id},true);discardTapeDrag();if(drawingPath){drawingPath=false;pathDraft=[];syncTapeEditor();drawMain();toast('経路の描画を取り消しました。');}closeModal();}if(e.key==='Enter'&&drawingPath&&document.activeElement.tagName!=='TEXTAREA')finishPath();});
 function download(name,blob){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);}

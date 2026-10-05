@@ -14,7 +14,7 @@ function error(text){$('errorBanner').textContent=text;$('errorBanner').hidden=!
 function format(n,dec=1){if(n===null||!Number.isFinite(n))return '—';return n.toLocaleString('ja-JP',{maximumFractionDigits:dec,minimumFractionDigits:dec});}
 function metric(el,value,unit){const box=$(el);box.textContent=value;const sm=document.createElement('small');sm.textContent=unit;box.appendChild(sm);}
 function status(text,kind=''){const box=$('status');box.className='status '+kind;$('statusText').textContent=text;}
-function createWorker(){const content=$('gaming-core').textContent+'\n'+$('solver-core').textContent+'\n'+$('worker-source').textContent;const url=URL.createObjectURL(new Blob([content],{type:'text/javascript'}));let w=new Worker(url);URL.revokeObjectURL(url);return w;}
+function createWorker(){const content=['gaming-core','tape-geometry-core','tape-placement-core','solver-core','worker-source'].map(id=>$(id).textContent).join('\n');const url=URL.createObjectURL(new Blob([content],{type:'text/javascript'}));let w=new Worker(url);URL.revokeObjectURL(url);return w;}
 function gamingActive(){return state.pattern==='gaming'&&state.gamingPlaying;}
 function gamingCacheKey(){const s={...state};for(const k of [...displayKeys,'gamingPhase','gamingPlaying','gamingSpeed','quality'])delete s[k];return JSON.stringify(s);}
 function syncGaming(){
@@ -130,6 +130,10 @@ function syncLEDSpec(){
 }
 function applyChange(key,value){
  cancelTapeDrag();
+ if(key==='path'){
+  try{O.makeLEDs(O.normalize({...state,layout:'path',path:value}));}
+  catch(e){const input=document.querySelector('[data-key="path"]');input.setAttribute('aria-invalid','true');$('tapeOutlineStatus').textContent=e.message+' 元の経路を保持しています。';$('tapeOutlineStatus').classList.add('invalid');return false;}
+ }
  const previous=state.layout;
  if(key==='layout'&&value==='manual'&&previous!=='manual'){try{lastAutoLayout=O.tapeLayout(state);Object.assign(state,structuredClone(lastAutoLayout));}catch(e){toast(e.message);return;}}
  if(key==='ledModel'){state=O.selectLEDModel(state,value);state.showLED=true;}
@@ -145,8 +149,9 @@ function applyChange(key,value){
  if(key==='view'&&value!=='layout')tapeMode='move';
  if(state.layout!=='path'||state.view!=='layout'){drawingPath=false;pathDraft=[];}
  state=O.normalize(state);persist();syncControls();
- if(displayKeys.has(key)){renderAll();return;}
+ if(displayKeys.has(key)){renderAll();return true;}
  clearSweepForChange();drawSection();if(state.view==='layout')drawMain();requestCompute(key==='polygon'||key==='path'?550:140);
+ return true;
 }
 $('ledPresetBtn').addEventListener('click',()=>applyChange('ledModel',state.ledModel));
 for(const el of document.querySelectorAll('[data-key]')){
@@ -192,8 +197,10 @@ function drawGrid(ctx,w,h,s,m){
 function drawDimensions(ctx,s,m){if(!state.showGrid)return;const y=m.y-17,x=m.x-18;ctx.strokeStyle='#67718a88';ctx.fillStyle='#8590aa';ctx.lineWidth=1;ctx.font='10px ui-monospace,Consolas,monospace';ctx.textAlign='center';ctx.beginPath();ctx.moveTo(m.x,y);ctx.lineTo(m.x+m.w,y);for(const xx of [m.x,m.x+m.w]){ctx.moveTo(xx,y-4);ctx.lineTo(xx,y+4);}ctx.stroke();ctx.fillText(format(s.width,0)+' mm',m.ox,y-7);ctx.beginPath();ctx.moveTo(x,m.y);ctx.lineTo(x,m.y+m.h);for(const yy of [m.y,m.y+m.h]){ctx.moveTo(x-4,yy);ctx.lineTo(x+4,yy);}ctx.stroke();ctx.save();ctx.translate(x-8,m.oy);ctx.rotate(-Math.PI/2);ctx.fillText(format(s.height,0)+' mm',0,0);ctx.restore();ctx.textAlign='left';}
 function drawLEDs(ctx,leds,s,m,overlay=false){
  if(!overlay&&leds.length){
-  ctx.strokeStyle='#9aa6b11b';ctx.lineWidth=Math.max(2,(s.packageSize+2)*m.scale);ctx.lineCap='round';
-  ctx.beginPath();let prev=null;for(const p of leds){if(prev&&prev.tapeIndex===p.tapeIndex)ctx.lineTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale);else ctx.moveTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale);prev=p;}ctx.stroke();
+  const groups=new Map();for(const p of leds){if(!groups.has(p.tapeIndex))groups.set(p.tapeIndex,[]);groups.get(p.tapeIndex).push([p.x,p.y,p.angle]);}
+  for(const [index,points] of groups){const invalid=!O.tapeFits(s,points),footprints=O.tapeFootprints(s,points);ctx.fillStyle=invalid?'#ff718849':index===selectedTape?'#71e5cf35':'#9aa6b126';ctx.strokeStyle=invalid?'#ff7188':index===selectedTape?'#71e5cf':'#9aa6b147';ctx.lineWidth=1;
+   for(const polygon of footprints.tapes){ctx.beginPath();polygon.forEach((p,i)=>i?ctx.lineTo(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale):ctx.moveTo(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale));ctx.closePath();ctx.fill();ctx.stroke();}
+  }
   const selected=leds.filter(p=>p.tapeIndex===selectedTape);ctx.strokeStyle='#71e5cf';ctx.lineWidth=2;
   ctx.beginPath();selected.forEach((p,i)=>i?ctx.lineTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale):ctx.moveTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale));ctx.stroke();
   for(const p of selected){const bs=Math.max(2,s.packageSize*m.scale)+6;ctx.save();ctx.translate(m.ox+p.x*m.scale,m.oy+p.y*m.scale);ctx.rotate(p.angle);ctx.strokeRect(-bs/2,-bs/2,bs,bs);ctx.restore();}
@@ -281,12 +288,23 @@ function syncTapeEditor(){
  for(const id of ['tapeX','tapeY','applyTapePosition','tapeAngle','applyTapeAngle'])$(id).disabled=disabled;
  $('convertManual').disabled=!lastAutoLayout.manual.length||!!dragTape;$('clearManual').disabled=!state.manual.length||!!dragTape;
  $('tapeCount').value=tapes.length;$('applyTapeCount').disabled=!!dragTape||drawingPath;
- $('tapeCount').disabled=!!dragTape||drawingPath;
+ $('tapeCount').disabled=!!dragTape||drawingPath;$('autoTapeCount').disabled=!!dragTape||drawingPath;
  $('tapeAngle').value=tape?Number(TapeTools.rotation(O,layout,selectedTape).toFixed(2)):'';
  document.querySelectorAll('[data-align]').forEach(btn=>btn.disabled=!!dragTape||drawingPath||!tapes.length||($('alignScope').value==='selected'&&!tape));
  const anchor=tape?layout.manual[tape.start]:null;
  $('tapeX').value=anchor?Number(anchor[0].toFixed(3)):'';$('tapeY').value=anchor?Number(anchor[1].toFixed(3)):'';
  tapeMessage(drawingPath?'経路を確定するとテープを移動できます。':tape?`${tape.length} LEDを接続したまま${tapeMode==='rotate'?'回転':'移動'}します。`:'画面上のテープ、または上の一覧から選択してください。');
+ syncTapeOutline();
+}
+function syncTapeOutline(){
+ const box=$('tapeOutlineStatus');let invalid=false,text;
+ try{
+  if(state.layout==='manual'){
+   const layout=editorLayout(),diagnostics=O.tapeDiagnostics(state,layout);invalid=!!diagnostics.invalidTapes.length;
+   text=invalid?`幅 ${state.tapeWidth} mm：テープ ${diagnostics.invalidTapes.map(i=>i+1).join('・')} が輪郭に収まりません。座標と接続は保持し、群全体を光学計算から除外します。赤い基板を移動・回転または幅調整してください。`:`幅 ${state.tapeWidth} mm：${layout.tapeLengths.length} 本の端部・LED間の接続まで輪郭内です。`;
+  }else{const geo=O.makeLEDs(state);text=`幅 ${state.tapeWidth} mm：${geo.tapeLengths.length} 本を配置。`+(geo.splitCount?`切り欠き・穴を避けて ${geo.splitCount} か所で分割しています。各本は別の基板です。`:'基板の端部・LED間の接続まで輪郭内です。');}
+ }catch(e){invalid=true;text=e.message;}
+ box.textContent=text;box.classList.toggle('invalid',invalid);
 }
 function cancelTapeDrag(){
  if(!dragTape)return;const id=dragTape.pointerId;dragTape=null;if($('mainCanvas').hasPointerCapture(id))$('mainCanvas').releasePointerCapture(id);toggleExport();
@@ -308,14 +326,15 @@ function applyTapeCount(){
  try{if(!$('tapeCount').value.trim()||!Number.isInteger(count)||count<1||count>100)throw Error('LEDテープの本数は1〜100の整数で指定してください。');
   if(count===layout.tapeLengths.length){$('tapeCountStatus').textContent='現在の本数と同じです。';return;}
   if(state.layout==='rows'){
-   const available=state.height-2*Math.max(state.inset,state.packageSize/2),spacing=count>1?Math.min(state.rowSpacing,available/(count-1)):state.rowSpacing;
-   if(spacing<state.packageSize+1&&count>1)throw Error('指定本数を並べる幅がありません。板を広げるか、本数を減らしてください。');
+   const available=state.height-2*Math.max(state.inset,state.packageSize/2,state.tapeWidth/2),spacing=count>1?Math.min(state.rowSpacing,available/(count-1)):state.rowSpacing;
+   if(spacing<Math.max(state.packageSize,state.tapeWidth)+1&&count>1)throw Error('指定本数を並べる幅がありません。板を広げるか、本数を減らしてください。');
    const next=O.normalize({...state,tapeCount:count,rowSpacing:spacing});O.makeLEDs(next);resetTapeEditor();state=next;persist();syncControls();clearSweepForChange();drawMain();requestCompute(0);
   }else commitTapeLayout(TapeTools.resize(O,state,layout,count,selectedTape));
   $('tapeCountStatus').textContent=`LEDテープを${count}本にしました。`;$('tapeCount').setAttribute('aria-invalid','false');
  }catch(e){$('tapeCountStatus').textContent=e.message;$('tapeCount').setAttribute('aria-invalid','true');}
 }
 $('applyTapeCount').addEventListener('click',applyTapeCount);$('tapeCount').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyTapeCount();}});
+$('autoTapeCount').addEventListener('click',()=>{resetTapeEditor();applyChange('tapeCount',0);$('tapeCountStatus').textContent='本数を自動に戻しました。切り欠き・穴を避け、収まる部分を別のテープとして配置します。';});
 function applyTapeAngle(){try{if(!$('tapeAngle').value.trim())throw Error('角度を入力してください。');const degrees=Number($('tapeAngle').value);if(degrees<-180||degrees>180)throw Error('角度は−180〜180°で指定してください。');commitTapeLayout(TapeTools.rotate(O,state,editorLayout(),selectedTape,degrees));}catch(e){tapeMessage(e.message,true);}}
 $('applyTapeAngle').addEventListener('click',applyTapeAngle);$('tapeAngle').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyTapeAngle();}});
 $('alignScope').addEventListener('change',syncTapeEditor);
@@ -387,7 +406,7 @@ $('mainCanvas').addEventListener('pointercancel',discardTapeDrag);$('mainCanvas'
 $('convertManual').addEventListener('click',()=>{selectedTape=-1;commitTapeLayout(structuredClone(lastAutoLayout));});
 $('clearManual').addEventListener('click',()=>{selectedTape=-1;commitTapeLayout({manual:[],tapeLengths:[]});});
 $('pathDrawBtn').addEventListener('click',()=>{applyChange('view','layout');drawingPath=true;pathDraft=[];syncTapeEditor();drawMain();toast('輪郭内をクリックして経路の点を追加します。Enterで確定、Escapeで取り消します。');});
-function finishPath(){if(!drawingPath)return;if(pathDraft.length<2){toast('経路には2点以上が必要です。');return;}drawingPath=false;applyChange('path',pathDraft.map(p=>p.join(',')).join('\n'));pathDraft=[];drawMain();}
+function finishPath(){if(!drawingPath)return;if(pathDraft.length<2){toast('経路には2点以上が必要です。');return;}const path=pathDraft.map(p=>p.join(',')).join('\n');if(!applyChange('path',path)){toast('テープ幅を含めて輪郭内に収まる経路を指定してください。Escapeで描画を取り消せます。');return;}drawingPath=false;pathDraft=[];syncTapeEditor();drawMain();}
 $('pathFinishBtn').addEventListener('click',finishPath);
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){if(orbit)finishOrbit({pointerId:orbit.id},true);discardTapeDrag();if(drawingPath){drawingPath=false;pathDraft=[];syncTapeEditor();drawMain();toast('経路の描画を取り消しました。');}closeModal();}if(e.key==='Enter'&&drawingPath&&document.activeElement.tagName!=='TEXTAREA')finishPath();});
 function download(name,blob){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);}

@@ -189,7 +189,7 @@ with sync_playwright() as p:
     check('X/Y apply moves the entire tape from its wiring-order first LED',translated(moved,coordinates,1,65-anchor[0],-4-anchor[1]) and coordinates['manual'][9][:2]==[65,-4] and page.locator('#tapeX').input_value()=='65')
     check('Tape movement keeps all colors and LED indices in the calculation',page.evaluate('DiffusionLab.getResult().leds.map(p=>[p.index,p.rgb,p.tapeIndex])')==colors)
     page.locator('#tapeX').fill('-120');page.locator('#applyTapePosition').click()
-    check('Outside coordinate entry rejects the complete move without clamping',taped_layout(page)==coordinates and page.locator('#tapeX').input_value()=='-120' and page.locator('#tapeX').get_attribute('aria-invalid')=='true' and 'テープ全体' in page.locator('#tapePositionStatus').inner_text())
+    check('Outside coordinate entry rejects the complete move without clamping',taped_layout(page)==coordinates and page.locator('#tapeX').input_value()=='-120' and page.locator('#tapeX').get_attribute('aria-invalid')=='true' and 'テープの幅' in page.locator('#tapePositionStatus').inner_text())
     page.locator('#tapeX').fill('');page.locator('#applyTapePosition').click()
     check('Empty coordinates do not become zero or move a tape',taped_layout(page)==coordinates and '両方' in page.locator('#tapePositionStatus').inner_text())
     page.locator('#tapeX').fill('63.5');page.locator('#tapeY').fill('-3.5');page.locator('#tapeY').press('Enter');wait(page)

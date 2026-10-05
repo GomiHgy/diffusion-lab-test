@@ -45,6 +45,8 @@ jobs:
           node --check src/svg-import.js
           node --check src/gaming.js
           node --check src/tape-tools.js
+          node --check src/tape-geometry.js
+          node --check src/tape-placement.js
           node --check src/view3d.js
           node --check src/app.js
 
@@ -55,7 +57,7 @@ jobs:
         run: python -m unittest discover -s tests -p "test_build.py" -v
 
       - name: Test optical calculations
-        run: node --test tests/test_optics.js tests/test_led_profiles.js tests/test_photometry.js tests/test_svg.js tests/test_tape_tools.js tests/test_gaming.js tests/test_view3d.js
+        run: node --test tests/test_optics.js tests/test_led_profiles.js tests/test_photometry.js tests/test_svg.js tests/test_tape_tools.js tests/test_tape_geometry.js tests/test_tape_placement.js tests/test_gaming.js tests/test_view3d.js
 
       - name: Install browser test dependencies
         run: |
@@ -68,6 +70,7 @@ jobs:
           python tests/test_features.py
           python tests/test_interactions.py
           python tests/test_photometry.py
+          python tests/test_tape_outline.py
 
       - name: Upload only the built website
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

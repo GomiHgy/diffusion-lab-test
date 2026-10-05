@@ -35,9 +35,9 @@ test('all-tape alignment translates the assembly without collapsing relative pos
  const layout=make(),aligned=T.align(O,s,layout,null,'centerY'),delta=aligned.manual[0][1]-layout.manual[0][1],b=T.bounds(O,s,aligned);
  near((b.y0+b.y1)/2,0);aligned.manual.forEach((p,i)=>{near(p[0],layout.manual[i][0]);near(p[1]-layout.manual[i][1],delta);near(p[2],layout.manual[i][2]);});assert.deepEqual(aligned.tapeLengths,[3,2]);
 });
-test('bounds include the rotated package rather than only LED centers',()=>{
+test('bounds include the wider rotated tape rather than only the smaller package',()=>{
  const layout={manual:[[10,20,Math.PI/4]],tapeLengths:[1]},b=T.bounds(O,s,layout);
- near(b.x0,10-Math.sqrt(2));near(b.x1,10+Math.sqrt(2));near(b.y0,20-Math.sqrt(2));near(b.y1,20+Math.sqrt(2));
+ near(b.x0,10-4*Math.sqrt(2));near(b.x1,10+4*Math.sqrt(2));near(b.y0,20-4*Math.sqrt(2));near(b.y1,20+4*Math.sqrt(2));
 });
 test('alignment into a ring hole fails without partially changing the tape',()=>{
  const board=O.normalize({...s,shape:'ring',width:100,height:100,hole:.5}),layout={manual:[[35,-4,0],[35,4,0]],tapeLengths:[2]},snapshot=structuredClone(layout);
@@ -62,6 +62,24 @@ test('empty layout can create a new connected tape from current board and densit
  const board=O.normalize({...s,width:100,height:60,density:60}),out=T.resize(O,board,{manual:[],tapeLengths:[]},2);
  assert.equal(out.tapeLengths.length,2);assert.ok(out.tapeLengths.every(n=>n>1));T.validate(O,board,out);
  for(const t of O.tapeRanges(out))for(let i=t.start+1;i<t.start+t.length;i++)near(Math.hypot(out.manual[i][0]-out.manual[i-1][0],out.manual[i][1]-out.manual[i-1][1]),1000/60);
+});
+test('empty U-shaped layout selects one legal central-row group before duplicating whole tapes',()=>{
+ const board=O.normalize({...s,shape:'svg',width:120,height:100,density:100,inset:6,tapeWidth:8,svgShapes:[{fillRule:'nonzero',contours:[[[0,0],[30,0],[30,70],[70,70],[70,0],[100,0],[100,100],[0,100]]]}]}),empty={manual:[],tapeLengths:[]},snapshot=structuredClone([board,empty]);
+ const center=O.tapeLayout({...board,layout:'rows',tapeCount:0,rowSpacing:board.height*2,rotation:0});assert.equal(center.tapeLengths.length,2);
+ const one=T.resize(O,board,empty,1);assert.deepEqual(one.manual,center.manual.slice(0,center.tapeLengths[0]));assert.deepEqual(one.tapeLengths,[center.tapeLengths[0]]);T.validate(O,board,one);
+ assert.ok(one.manual.every(p=>p[0]<0&&p[1]===0));
+ const two=T.resize(O,board,empty,2);assert.equal(two.tapeLengths.length,2);assert.deepEqual(two.manual.slice(0,one.manual.length),one.manual);T.validate(O,board,two);
+ const clone=two.manual.slice(one.manual.length),dx=clone[0][0]-one.manual[0][0],dy=clone[0][1]-one.manual[0][1];clone.forEach((p,i)=>{near(p[0]-one.manual[i][0],dx);near(p[1]-one.manual[i][1],dy);near(p[2],one.manual[i][2]);});assert.deepEqual([board,empty],snapshot);
+});
+test('empty disconnected SVG layout falls back to normal rows when the central row is blank',()=>{
+ const board=O.normalize({...s,shape:'svg',width:120,height:100,density:100,inset:6,tapeWidth:8,rowSpacing:20,svgShapes:[{fillRule:'nonzero',contours:[[[0,0],[35,0],[35,30],[0,30]]]},{fillRule:'nonzero',contours:[[[65,70],[100,70],[100,100],[65,100]]]}]}),empty={manual:[],tapeLengths:[]},snapshot=structuredClone(empty);
+ assert.equal(O.tapeLayout({...board,layout:'rows',tapeCount:0,rowSpacing:board.height*2,rotation:0}).manual.length,0);
+ const fallback=O.tapeLayout({...board,layout:'rows',tapeCount:0,rotation:0}),out=T.resize(O,board,empty,1);assert.ok(fallback.tapeLengths.length>1);
+ assert.deepEqual(out.manual,fallback.manual.slice(0,fallback.tapeLengths[0]));assert.deepEqual(out.tapeLengths,[fallback.tapeLengths[0]]);T.validate(O,board,out);assert.ok(out.manual.every(p=>p[0]<0&&p[1]<0));assert.deepEqual(empty,snapshot);
+});
+test('empty layout with no room for the tape width fails without inserting partial data',()=>{
+ const board=O.normalize({...s,shape:'svg',width:100,height:100,tapeWidth:8,density:100,svgShapes:[{fillRule:'nonzero',contours:[[[0,0],[3,0],[3,100],[0,100]]]},{fillRule:'nonzero',contours:[[[97,0],[100,0],[100,100],[97,100]]]}]}),empty={manual:[],tapeLengths:[]};
+ assert.throws(()=>T.resize(O,board,empty,1),/輪郭内に新しいテープ/);assert.deepEqual(empty,{manual:[],tapeLengths:[]});
 });
 test('count overflow and insufficient space fail atomically after attempted placement',()=>{
  const board=O.normalize({...s,width:12,height:12}),layout={manual:[[0,0,0]],tapeLengths:[1]},snapshot=structuredClone(layout);
