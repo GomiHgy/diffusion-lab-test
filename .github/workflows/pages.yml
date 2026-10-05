@@ -55,7 +55,7 @@ jobs:
         run: python -m unittest discover -s tests -p "test_build.py" -v
 
       - name: Test optical calculations
-        run: node --test tests/test_optics.js tests/test_led_profiles.js tests/test_svg.js tests/test_tape_tools.js tests/test_gaming.js tests/test_view3d.js
+        run: node --test tests/test_optics.js tests/test_led_profiles.js tests/test_photometry.js tests/test_svg.js tests/test_tape_tools.js tests/test_gaming.js tests/test_view3d.js
 
       - name: Install browser test dependencies
         run: |
@@ -67,6 +67,7 @@ jobs:
           python tests/test_browser.py
           python tests/test_features.py
           python tests/test_interactions.py
+          python tests/test_photometry.py
 
       - name: Upload only the built website
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

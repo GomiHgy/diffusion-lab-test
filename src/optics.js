@@ -8,24 +8,31 @@ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // 出典の窓寸法と光学的な有効発光面は別物。未記載の値を製品仕様にしない。
 const ledProfiles={
  'WS2812B':{packageCode:'5050',packageSize:5.4,windowDiameter:4,angle:null,assumedAperture:2.8,assumedAngle:120,
+  photometry:{min:[300,800,200],typ:null,max:[500,1500,300],currentMA:16,page:3,threeChannelMax:null},
   revision:'Worldsemi WS2812B V1.4（2018-07-19）',pages:'p.2 機械寸法',
   datasheetUrl:'https://docid81hrs3j1.cloudfront.net/medialibrary/2018/10/WS2812B_V1.4_EN_18090714224701.pdf'},
  'WS2812B-MINI':{packageCode:'3535',packageSize:3.46,windowDiameter:2.85,angle:null,assumedAperture:1.9,assumedAngle:120,
+  photometry:{min:[300,600,200],typ:[310,780,215],max:[500,1000,300],currentMA:12,page:3,threeChannelMax:null},
   revision:'Worldsemi WS2812B-Mini-V3 V3.0（2019-01-23）',pages:'p.2 機械寸法',
   datasheetUrl:'https://www.peace-corp.co.jp/data/WS2812B-Mini-V3_V3.0_EN.pdf'},
  'WS2812C-2020':{packageCode:'2020',packageSize:2.2,windowDiameter:null,angle:null,assumedAperture:1.1,assumedAngle:120,
+  photometry:{min:[50,200,50],typ:[80,270,70],max:[100,300,100],currentMA:5,page:3,threeChannelMax:null},
   revision:'Worldsemi WS2812C-2020 V1.2（2019-01-04）',pages:'p.1 機械寸法',
   datasheetUrl:'https://cdn.sparkfun.com/assets/e/1/0/f/b/WS2812C-2020_V1.2_EN_19112716191654.pdf'},
  'SK6812':{packageCode:'5050',packageSize:5.4,windowDiameter:null,angle:120,assumedAperture:2.8,assumedAngle:120,
+  photometry:{min:[280,815,160],typ:null,max:[515,1275,320],currentMA:12,page:6,tolerancePercent:10,threeChannelMax:70},
   revision:'OPSCO SK6812-012 Rev.B/1（2025-08-11）',pages:'p.3 光学特性 / p.4 機械寸法',
   datasheetUrl:'https://datasheet.lcsc.com/datasheet/pdf/9f469126feffa69bd23486dc2acd2d83.pdf'},
  'SK6812-MINI':{packageCode:'3535',packageSize:3.7,windowDiameter:null,angle:120,assumedAperture:1.9,assumedAngle:120,
+  photometry:{min:[280,815,200],typ:null,max:[515,1275,385],currentMA:12,page:6,tolerancePercent:10,threeChannelMax:null},
   revision:'OPSCO SK6812MINI-012 Rev.B/0（2024-04-23）',pages:'p.3 光学特性 / p.4 機械寸法',
   datasheetUrl:'https://datasheet.lcsc.com/datasheet/pdf/9596115a5796613b5408a09f63fb1427.pdf'}
 };
 // 円形の開口を同じ面積の正方形に置換する。ダイ寸法や実測幅の算出ではない。
 function profileAperture(p){return p.windowDiameter===null?p.assumedAperture:p.windowDiameter*Math.sqrt(PI)/2;}
-function profileValues(p){return {packageSize:p.packageSize,aperture:profileAperture(p),angle:p.angle===null?p.assumedAngle:p.angle};}
+// Typ未記載の型番は、記載範囲の中点を計算用の代表値にする。メーカーTyp値とは区別する。
+function profileIntensity(p){const v=p.photometry;return v.typ?v.typ.slice():v.min.map((x,i)=>(x+v.max[i])/2);}
+function profileValues(p){const [mcdR,mcdG,mcdB]=profileIntensity(p);return {packageSize:p.packageSize,aperture:profileAperture(p),angle:p.angle===null?p.assumedAngle:p.angle,mcdR,mcdG,mcdB};}
 const defaults={
  version:1,shape:'rounded',width:160,height:72,radius:10,hole:0.46,
  polygon:'50,2\n88,16\n98,50\n75,94\n25,94\n2,50\n12,16',
@@ -33,7 +40,7 @@ const defaults={
  layout:'rows',density:60,rowSpacing:24,inset:8,rotation:0,tapeCount:0,
  path:'-65,18\n-65,-18\n0,-18\n0,18\n65,18\n65,-18',manual:[],tapeLengths:[],
  ledModel:'WS2812B',package:'custom',...profileValues(ledProfiles.WS2812B),splitRGB:false,
- mcdR:213,mcdG:715,mcdB:72,brightness:20,
+ brightness:20,
  gamingScene:'rainbowWave',gamingSpeed:1,gamingPhase:0,gamingPlaying:false,
  pattern:'gradient',color1:'#00cfff',color2:'#ff3979',pwmMode:'raw',
  gap:10,material:'opal',argb:'#FFFFFFFF',thickness:3,
@@ -53,10 +60,11 @@ function normalize(input={}) {
   s.ledModel='custom';
   const old={'5050':{packageSize:5,aperture:2.8},'3535':{packageSize:3.5,aperture:1.9},'2020':{packageSize:2,aperture:1.1}}[input.package];
   if(old)for(const k in old)if(!Object.prototype.hasOwnProperty.call(input,k))s[k]=old[k];
+  for(const [k,v] of Object.entries({mcdR:213,mcdG:715,mcdB:72}))if(!Object.prototype.hasOwnProperty.call(input,k))s[k]=v;
  }else if(!ENUMS.ledModel.includes(s.ledModel))s.ledModel='custom';
- const profile=ledProfiles[s.ledModel];
- if(profile)for(const [k,v] of Object.entries(profileValues(profile)))if(!Object.prototype.hasOwnProperty.call(input,k))s[k]=v;
- for(const k in RANGES){const v=Number(s[k]);s[k]=Number.isFinite(v)?clamp(v,...RANGES[k]):defaults[k];}
+ const profile=ledProfiles[s.ledModel],preset=profile?profileValues(profile):null;
+ if(preset)for(const [k,v] of Object.entries(preset))if(!Object.prototype.hasOwnProperty.call(input,k))s[k]=v;
+ for(const k in RANGES){const v=Number(s[k]);s[k]=Number.isFinite(v)?clamp(v,...RANGES[k]):preset&&k in preset?preset[k]:defaults[k];}
  for(const k in ENUMS)if(!ENUMS[k].includes(s[k]))s[k]=defaults[k];
  s.tapeCount=Math.round(s.tapeCount);
  s.quality=[160,288,448].includes(Number(s.quality))?Number(s.quality):288;
@@ -85,10 +93,19 @@ function selectLEDModel(input,id){
 }
 function ledDescription(s){
  const p=ledProfiles[s.ledModel];
- if(!p)return {label:'カスタム',widthBasis:'手動・旧設定',angleBasis:'手動・旧設定'};
+ if(!p)return {label:'カスタム',widthBasis:'手動・旧設定',angleBasis:'手動・旧設定',intensityBasis:'手動・旧設定'};
  const widthBasis=Math.abs(s.aperture-profileAperture(p))>1e-9?'手動上書き':p.windowDiameter===null?'資料未記載・仮定':'開口面積からの近似';
  const angleBasis=s.angle!==(p.angle===null?p.assumedAngle:p.angle)?'手動上書き':p.angle===null?'資料未記載・仮定':'資料の半値角';
- return {label:s.ledModel,widthBasis,angleBasis};
+ const expected=profileIntensity(p),intensityBasis=[s.mcdR,s.mcdG,s.mcdB].some((v,i)=>Math.abs(v-expected[i])>1e-9)?'手動上書き':p.photometry.typ?'資料のTyp値':'記載範囲の中点';
+ return {label:s.ledModel,widthBasis,angleBasis,intensityBasis};
+}
+function angularExponent(angle){return -Math.log(2)/Math.log(Math.cos(angle*PI/360));}
+// 光源の前方半球を積分した推定光束。メーカー公称lmや拡散板通過後の光束ではない。
+// rgbは出力係数を含む線形PWM比。省略時は出力設定でのRGB白、LED1個を表す。
+function luminousFlux(s,rgb=null){
+ const levels=rgb||[s.brightness/100,s.brightness/100,s.brightness/100],factor=2*PI/(angularExponent(s.angle)+1)/1000;
+ const channels=[s.mcdR,s.mcdG,s.mcdB].map((v,i)=>v*levels[i]*factor);
+ return {channels,total:channels.reduce((a,b)=>a+b,0)};
 }
 function parsePoints(text,percent=false,s=defaults){
  const out=[];
@@ -262,7 +279,7 @@ function fftLine(re,im,start,stride,n,inverse){const p=plan(n);for(let i=1;i<n;i
 function fft2(re,im,w,h,inverse=false){for(let y=0;y<h;y++)fftLine(re,im,y*w,1,w,inverse);for(let x=0;x<w;x++)fftLine(re,im,x,w,h,inverse);}
 const pow2=n=>2**Math.ceil(Math.log2(n));
 function kernelValue(dx,dy,gap,m){const r2=dx*dx+dy*dy+gap*gap;return 1e6/r2*Math.pow(gap/Math.sqrt(r2),m+1);}
-function makeKernel(nx,ny,dx,dy,gap,angle){const w=pow2(2*nx),h=pow2(2*ny),re=new Float32Array(w*h),im=new Float32Array(w*h);const m=-Math.log(2)/Math.log(Math.cos(angle*PI/360));
+function makeKernel(nx,ny,dx,dy,gap,angle){const w=pow2(2*nx),h=pow2(2*ny),re=new Float32Array(w*h),im=new Float32Array(w*h);const m=angularExponent(angle);
  for(let y=0;y<h;y++){let yy=(y<=h/2?y:y-h)*dy;for(let x=0;x<w;x++){let xx=(x<=w/2?x:x-w)*dx;re[y*w+x]=kernelValue(xx,yy,gap,m);}}
  fft2(re,im,w,h);return {re,im,w,h,m};}
 function splat(a,w,nx,ny,x,y,v){const x0=Math.floor(x),y0=Math.floor(y),fx=x-x0,fy=y-y0;for(let j=0;j<2;j++)for(let i=0;i<2;i++){let xx=x0+i,yy=y0+j;if(xx>=0&&xx<nx&&yy>=0&&yy<ny)a[yy*w+xx]+=v*(i?fx:1-fx)*(j?fy:1-fy);}}
@@ -310,6 +327,8 @@ class Solver {
   const stats=statistics(fields,mask,roiMask,nx,ny,dx,dy),warnings=[];
   if(!stats.validROI)roiMask.set(mask);
   if(!leds.length)warnings.push('計算対象のLEDがありません。配置条件を調整するか、テープ配置をコピーしてください。');
+  const threeMax=ledProfiles[s.ledModel]?.photometry.threeChannelMax;
+  if(threeMax&&leds.some(led=>led.rgb.every(v=>v>0)&&Math.max(...led.rgb)>threeMax/100+1e-9))warnings.push(`参照SK6812-012ではRGB3色同時点灯は${threeMax}%灰階で使用します（資料p.3）。現在その条件を超えるLEDがあります。計算は入力値のままです。`);
   if(geo.discarded)warnings.push(s.layout==='manual'?`輪郭外のLED ${geo.discarded} 個は計算から除外しています。接続と座標は保持しているため、テープ全体を輪郭内に移動してください。`:`輪郭外または端に近いLED候補 ${geo.discarded} 個を除外しました。`);
   if(Math.max(dx,dy)>s.gap/2)warnings.push('距離に対して計算格子が粗い条件です。高精細にするか、形状を小さくして再確認してください。');
   if(s.diffuse<99&&Math.max(dx,dy)>s.aperture/2)warnings.push('直接透過するLED像は格子解像度の影響を受けます。高精細で確認してください。');
@@ -331,6 +350,6 @@ function rgba(result,display={}){
   for(let c=0;c<3;c++)out[i*4+c]=clamp(rgb[c]*255,0,255);out[i*4+3]=255;
  }return out;
 }
-const api={defaults,ledProfiles,profileAperture,selectLEDModel,ledDescription,normalize,shapeInfo,svgGeometry,outline,parsePoints,makeLEDs,tapeLayout,tapeRanges,moveTape,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
+const api={defaults,ledProfiles,profileAperture,profileIntensity,selectLEDModel,ledDescription,luminousFlux,normalize,shapeInfo,svgGeometry,outline,parsePoints,makeLEDs,tapeLayout,tapeRanges,moveTape,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
 root.Optics=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof self!=='undefined'?self:globalThis);

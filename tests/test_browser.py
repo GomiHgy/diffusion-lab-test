@@ -74,7 +74,9 @@ with sync_playwright() as p:
         check('LED model selection reaches the calculation: '+model,page.evaluate('''(id)=>{
             const s=DiffusionLab.getState(),r=DiffusionLab.getResult().state,p=Optics.ledProfiles[id];
             return s.ledModel===id && r.ledModel===id && s.packageSize===p.packageSize &&
-                r.aperture===Optics.profileAperture(p) && s.mcdR===213 &&
+                r.aperture===Optics.profileAperture(p) &&
+                [s.mcdR,s.mcdG,s.mcdB].every((v,i)=>v===Optics.profileIntensity(p)[i]) &&
+                [r.mcdR,r.mcdG,r.mcdB].every((v,i)=>v===Optics.profileIntensity(p)[i]) &&
                 document.querySelector('[data-key="packageSize"]').readOnly &&
                 !document.querySelector('[data-key="aperture"]').disabled &&
                 !document.querySelector('[data-key="angle"]').disabled &&

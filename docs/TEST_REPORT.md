@@ -1,5 +1,30 @@
 # 検証記録
 
+## 型番別RGB光度・光源の推定光束（2026-10-05）
+
+対象：5型番の資料光度、Typ値と記載範囲の中点の区別、型番選択・復元、RGB白のLED1個の推定光束、手動光度と旧設定の保持、求解・演出・3D・書き出しへの反映。
+
+| 検証 | 結果 | 確認内容 |
+|---|---|---|
+| メーカー資料 | PASS / 5型番 | Worldsemi p.3、OPSCO p.6の光学表を画像と本文で確認。採用版・元範囲・Typ・電流条件を[LED_SPECS.md](LED_SPECS.md)へ記録 |
+| JavaScript構文 | PASS | optics / worker / svg-import / gaming / tape-tools / view3d / app |
+| 数値・形状・モデル | PASS 114 / 114 | 従来95件と光度19件。資料の固定期待値、旧値保持、非有限入力、独立した球面数値積分、120°のπI、RGB加算、出力1回、面積による光度増加なし、求解結果の光度比、キャッシュ、SK70%条件 |
+| ビルド・配信 | PASS 12 / 12 | ソース・生成HTML一致、公開物限定、HTTPルート・サブパス |
+| ブラウザ操作 | PASS 233 / 233 | 既存100件、機能50件、操作31件、光度52件。5型番のRGBフィールド比例、出力・露出・接続保持、手動・復元・保存・CSV、旧JSON/localStorage、演出キャッシュ再生成、2D/3D・PNG、モバイル幅 |
+| 画面・PNG | PASS | 光度と根拠、RGB白・LED1個のlm説明、3D PNGの光度条件、モバイル折り返しを目視 |
+| 実行時エラー・自動外部通信 | PASS / 0件 | 各ブラウザ検証で確認 |
+| 生成HTML一致・差分空白 | PASS | build.py --check / git diff --check |
+| 実機LEDの測光・校正 | NOT RUN | 資料に基づく計算とブラウザ検証まで。推定lmはメーカー公称光束ではない |
+| 今回のGitHub Pagesデプロイ | NOT RUN | ローカル実装・生成・HTTP検証まで |
+
+実行環境：Windows、Python 3.11.7、Node.js 24.13.0、Playwright 1.57.0、Chrome 152.0.7977.83。
+
+光度値は資料に記載されたmcdを採用し、各色の正面光度として計算に使用します。TypがないWS2812B・SK6812・SK6812-MINIは範囲の中点をモデル代表値とします。採用資料に絶対光束lmはなく、前方半球のcosⁿ配光積分による推定を表示します。光度測定の電圧・温度・PWM dutyは光学表に明記されていません。
+
+SK6812-012の三色同時70%条件は説明と計算警告で示し、入力値を強制変更しません。保存済みの明示光度は読み込み時に保持し、型番選択または初期値復元時に新しい光度を適用します。
+
+再実行は[開発ガイド](DEVELOPMENT.md)のコマンドを使用します。追加検証は `tests/test_photometry.js` と `tests/test_photometry.py`。結果は `tests/artifacts/photometry-test-results.json`、画面は `preview-datasheet-photometry-3d.png` / `preview-datasheet-gaming-photometry.png` / `preview-datasheet-photometry-mobile.png`、PNGは `photometry-3d-preview.png` に保存します。CIにも両検証を追加しています。
+
 ## 3D土台への設置・キーボード移動・回転モード・LEDサイズ表示（2026-10-05）
 
 対象：テープと土台の接触、立体基板・パッケージ、選択テープの矢印キー移動、ダブルクリック回転、型番ごとの外形表示。前のファビコン変更も維持しています。

@@ -55,7 +55,7 @@ python build.py --check
 ```sh
 python build.py
 python -m unittest discover -s tests -p "test_build.py" -v
-node --test tests/test_optics.js tests/test_led_profiles.js tests/test_svg.js tests/test_tape_tools.js tests/test_gaming.js tests/test_view3d.js
+node --test tests/test_optics.js tests/test_led_profiles.js tests/test_photometry.js tests/test_svg.js tests/test_tape_tools.js tests/test_gaming.js tests/test_view3d.js
 ```
 
 ブラウザテスト用の依存をインストールします。Pythonの仮想環境の使用は任意です。
@@ -66,6 +66,7 @@ python -m playwright install chromium
 python tests/test_browser.py
 python tests/test_features.py
 python tests/test_interactions.py
+python tests/test_photometry.py
 ```
 
 LinuxのCIでOSライブラリも導入する場合は、同梱ワークフローと同じ次のコマンドを使います。
@@ -77,6 +78,7 @@ python -m playwright install --with-deps chromium
 ブラウザテストは自分でループバックHTTPサーバーを起動し、`/diffusion-lab/` というサブパスから実際にページを読み込みます。
 テープ全体のドラッグ・座標移動・取り消し・接続の保存復元、型番選択・根拠表示・手動上書き・旧設定の互換を含む画面操作と、ルート配信、読み込み後のオフライン計算、HTTPでの設定永続化、プロジェクトURL、実行時エラーを確認します。
 `test_features.py` は本数・回転・整列、3Dの視点とPNG、動くRGBの準備・停止・指定精度・JSON、同位相の距離比較を確認します。
+`test_photometry.js` / `test_photometry.py` は型番別RGB光度、光度と推定光束の単位・配光積分、出力係数、旧設定の保持、求解・演出・2D/3Dへの反映を確認します。
 テストの出力、PNG、JSON、CSVは `tests/artifacts/` に保存します。このフォルダーはGit管理対象外です。
 
 Playwrightが取得したブラウザではなく、既存のChromiumを利用する場合は `CHROMIUM_PATH` を指定します。

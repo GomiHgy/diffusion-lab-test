@@ -69,9 +69,9 @@ test('Explicit optical inputs survive normalization for a named model',()=>{
  }
 });
 
-test('Selecting a product updates only LED geometry and angle, preserving the rest of the design',()=>{
+test('Selecting a product updates LED geometry, angle and intensity, preserving the rest of the design',()=>{
  const initial=O.normalize({ledModel:'custom',packageSize:6,aperture:1.5,angle:81,mcdR:111,mcdG:222,mcdB:333,width:120,height:44,layout:'manual',manual:[[-12,3,.4],[14,-5,.9]],splitRGB:true,density:144,brightness:37,gap:9,transmission:61,spread:.8,exposure:2,showLED:true});
- const preserved=['mcdR','mcdG','mcdB','width','height','layout','manual','splitRGB','density','brightness','gap','transmission','spread','exposure','showLED'];
+ const preserved=['width','height','layout','manual','splitRGB','density','brightness','gap','transmission','spread','exposure','showLED'];
  for(const id of models){
   const before=structuredClone(initial),selected=O.selectLEDModel(initial,id),profile=O.ledProfiles[id];
   assert.equal(selected.ledModel,id);
@@ -79,6 +79,7 @@ test('Selecting a product updates only LED geometry and angle, preserving the re
   if(profile.windowDiameter===null)assert.equal(selected.aperture,profile.assumedAperture,id);
   else close(selected.aperture**2,Math.PI*(profile.windowDiameter/2)**2);
   assert.equal(selected.angle,profile.angle===null?profile.assumedAngle:profile.angle,id);
+  assert.deepEqual([selected.mcdR,selected.mcdG,selected.mcdB],O.profileIntensity(profile),id);
   for(const key of preserved)assert.deepEqual(selected[key],initial[key],`${id}: ${key}`);
   assert.deepEqual(initial,before,'Choosing a model mutated the original design');
  }
@@ -114,7 +115,7 @@ test('Source labels distinguish datasheet values, model assumptions and manual o
   assert.deepEqual(O.ledDescription(O.normalize(JSON.parse(JSON.stringify(overridden)))),manual,id);
  }
  const migrated=O.normalize({package:'2020',packageSize:2,aperture:1.1,angle:120});
- assert.deepEqual(O.ledDescription(migrated),{label:'カスタム',widthBasis:'手動・旧設定',angleBasis:'手動・旧設定'});
+ assert.deepEqual(O.ledDescription(migrated),{label:'カスタム',widthBasis:'手動・旧設定',angleBasis:'手動・旧設定',intensityBasis:'手動・旧設定'});
 });
 
 test('The selected full viewing angle maps to half normal intensity at each half-angle',()=>{
@@ -146,7 +147,7 @@ test('Switching between 5050 and 2020 products applies package clearance to auto
 
 test('The selected optical width changes the raster footprint while preserving LED output',()=>{
  const design=O.normalize({shape:'rect',width:20,height:20,layout:'manual',manual:[[0,0,0]],pattern:'solid',color1:'#ffffff',brightness:100,mcdR:1000,mcdG:1000,mcdB:1000});
- const states=['WS2812B','WS2812C-2020'].map(id=>O.selectLEDModel(design,id));
+ const states=['WS2812B','WS2812C-2020'].map(id=>O.normalize({...O.selectLEDModel(design,id),mcdR:1000,mcdG:1000,mcdB:1000}));
  const rasters=states.map(state=>O.rasterSources(state,O.makeLEDs(state).leds,80,80,.25,.25));
  const occupied=raster=>raster.src[0].reduce((count,v)=>count+(v>0?1:0),0);
  assert.ok(occupied(rasters[0])>occupied(rasters[1]),'The larger window retained the previous small LED footprint');
