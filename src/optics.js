@@ -29,7 +29,7 @@ const defaults={
  version:1,shape:'rounded',width:160,height:72,radius:10,hole:0.46,
  polygon:'50,2\n88,16\n98,50\n75,94\n25,94\n2,50\n12,16',
  layout:'rows',density:60,rowSpacing:24,inset:8,rotation:0,
- path:'-65,18\n-65,-18\n0,-18\n0,18\n65,18\n65,-18',manual:[],
+ path:'-65,18\n-65,-18\n0,-18\n0,18\n65,18\n65,-18',manual:[],tapeLengths:[],
  ledModel:'WS2812B',package:'custom',...profileValues(ledProfiles.WS2812B),splitRGB:false,
  mcdR:213,mcdG:715,mcdB:72,brightness:20,
  pattern:'gradient',color1:'#00cfff',color2:'#ff3979',pwmMode:'raw',
@@ -62,7 +62,13 @@ function normalize(input={}) {
  s.polygon=typeof s.polygon==='string'?s.polygon.slice(0,30000):defaults.polygon;
  s.path=typeof s.path==='string'?s.path.slice(0,30000):defaults.path;
  s.customLabel=typeof s.customLabel==='string'?s.customLabel.slice(0,200):defaults.customLabel;
- s.manual=Array.isArray(s.manual)?s.manual.slice(0,5000).filter(p=>Array.isArray(p)&&p.length>=2&&Number.isFinite(+p[0])&&Number.isFinite(+p[1])).map(p=>[clamp(+p[0],-s.width/2,s.width/2),clamp(+p[1],-s.height/2,s.height/2),Number.isFinite(+p[2])?+p[2]:0]):[];
+ // テープの接続順を保存する。輪郭変更で各LEDを個別に丸めて間隔を変えない。
+ const raw=Array.isArray(s.manual)?s.manual:[],lengths=validTapeLengths(raw.length,s.tapeLengths),manual=[],counts=[];
+ let offset=0;
+ for(const length of lengths){let count=0;for(let i=offset;i<Math.min(offset+length,5000);i++){
+  const p=raw[i];if(Array.isArray(p)&&p.length>=2&&Number.isFinite(+p[0])&&Number.isFinite(+p[1])){manual.push([+p[0],+p[1],Number.isFinite(+p[2])?+p[2]:0]);count++;}
+ }if(count)counts.push(count);offset+=length;if(offset>=5000)break;}
+ s.manual=manual;s.tapeLengths=counts;
  s.radius=Math.min(s.radius,s.width/2,s.height/2);
  s.aperture=Math.min(s.aperture,s.packageSize);
  s.version=1;return s;
@@ -135,10 +141,34 @@ function samplePath(p,pitch,closed=false){
  const out=[],offset=closed?0:(total-(n-1)*pitch)/2;let j=0;
  for(let i=0;i<n;i++){let d=offset+i*pitch;while(j<segs.length-1&&d>segs[j].start+segs[j].l)j++;const q=segs[j],t=clamp((d-q.start)/q.l,0,1);out.push([q.a[0]+(q.b[0]-q.a[0])*t,q.a[1]+(q.b[1]-q.a[1])*t,Math.atan2(q.b[1]-q.a[1],q.b[0]-q.a[0])]);}return out;
 }
+function validTapeLengths(n,lengths){
+ return Array.isArray(lengths)&&lengths.length&&lengths.every(v=>Number.isInteger(v)&&v>0)&&lengths.reduce((a,b)=>a+b,0)===n?lengths.slice():n?[n]:[];
+}
+function tapeRanges(layout){let start=0;return validTapeLengths(layout.manual.length,layout.tapeLengths).map((length,index)=>{const tape={index,start,length};start+=length;return tape;});}
+function tapeLayout(s){
+ if(s.layout==='manual')return {manual:s.manual.map(p=>p.slice()),tapeLengths:validTapeLengths(s.manual.length,s.tapeLengths)};
+ const geo=makeLEDs(s);return {manual:geo.leds.map(p=>[p.x,p.y,p.angle]),tapeLengths:geo.tapeLengths};
+}
+// 選択したテープだけを平行移動する。範囲外では部分的な移動・個別クランプをしない。
+function moveTape(s,layout,index,x,y){
+ const tape=tapeRanges(layout)[index];if(!tape)throw Error('移動するテープを選択してください。');
+ if(!Number.isFinite(x)||!Number.isFinite(y))throw Error('X・Yには数値を入力してください。');
+ const anchor=layout.manual[tape.start],dx=x-anchor[0],dy=y-anchor[1],{inside}=shapeInfo(s);
+ const manual=layout.manual.map((p,i)=>i>=tape.start&&i<tape.start+tape.length?[p[0]+dx,p[1]+dy,p[2]||0]:p.slice());
+ manual[tape.start][0]=x;manual[tape.start][1]=y;
+ if(!manual.slice(tape.start,tape.start+tape.length).every(p=>inside(p[0],p[1],s.packageSize/2)))throw Error('テープ全体が輪郭内に収まる位置を指定してください。');
+ return {manual,tapeLengths:validTapeLengths(manual.length,layout.tapeLengths)};
+}
 function makeLEDs(s){
  const {inside}=shapeInfo(s),pitch=1000/s.density,margin=Math.max(s.inset,s.packageSize/2),rot=s.rotation*PI/180;let list=[];
- if(s.layout==='manual')list=s.manual.map(p=>[p[0],p[1],p[2]||0]);
- else if(s.layout==='path')list=samplePath(parsePoints(s.path),pitch);
+ // 輪郭外の固定LEDも接続データに残す。計算には輪郭内のLEDだけを使う。
+ if(s.layout==='manual'){
+  if(s.manual.length>5000)throw Error('LED数が5,000個を超えます。');
+  const cols=ledColors(s,s.manual.length),all=[];
+  for(const tape of tapeRanges(s))for(let i=tape.start;i<tape.start+tape.length;i++){const p=s.manual[i];all.push({x:p[0],y:p[1],angle:p[2]||0,rgb:cols[i],index:i,tapeIndex:tape.index});}
+  const leds=all.filter(p=>inside(p.x,p.y));return {leds,tapeLengths:validTapeLengths(s.manual.length,s.tapeLengths),discarded:all.length-leds.length,pitch};
+ }
+ if(s.layout==='path')list=samplePath(parsePoints(s.path),pitch);
  else if(s.layout==='ring'){
   const a=s.width/2-margin,b=s.height/2-margin;if(a>0&&b>0){let p=[];for(let i=0;i<720;i++){let t=2*PI*i/720;p.push([a*Math.cos(t),b*Math.sin(t)]);}list=samplePath(p,pitch,true);}
  }else if(s.layout==='perimeter'){
@@ -149,12 +179,13 @@ function makeLEDs(s){
   if(Math.ceil(2*extent/pitch)*Math.ceil(2*extent/spacing)>90000)throw Error('配置候補が多すぎます。LED密度を下げてください。');
   const ny=Math.max(1,Math.floor((s.height-2*margin)/spacing)+1),nx=Math.max(1,Math.floor((s.width-2*margin)/pitch)+1);
   if(nx*ny>15000)throw Error('LED数が多すぎます。密度または列間隔を調整してください。');
-  for(let j=0;j<ny;j++){const row=[];for(let i=0;i<nx;i++){let x=(i-(nx-1)/2)*pitch,y=(j-(ny-1)/2)*spacing;row.push([x*Math.cos(rot)-y*Math.sin(rot),x*Math.sin(rot)+y*Math.cos(rot),rot]);}if(j%2)row.reverse();list.push(...row);}
+  for(let j=0;j<ny;j++){const row=[];for(let i=0;i<nx;i++){let x=(i-(nx-1)/2)*pitch,y=(j-(ny-1)/2)*spacing;row.push([x*Math.cos(rot)-y*Math.sin(rot),x*Math.sin(rot)+y*Math.cos(rot),rot,s.layout==='rows'?j:0]);}if(j%2)row.reverse();list.push(...row);}
  }
- const raw=list.length;list=list.filter(p=>inside(p[0],p[1],s.layout==='manual'?0:s.packageSize/2));
+ const raw=list.length;list=list.filter(p=>inside(p[0],p[1],s.packageSize/2));
  if(list.length>5000)throw Error('LED数が5,000個を超えます。密度を下げてください。');
- const cols=ledColors(s,list.length);
- return {leds:list.map((p,i)=>({x:p[0],y:p[1],angle:p[2]||0,rgb:cols[i],index:i})),discarded:raw-list.length,pitch};
+ const cols=ledColors(s,list.length),groups=new Map(),tapeLengths=[];
+ const leds=list.map((p,i)=>{const id=p[3]||0;if(!groups.has(id)){groups.set(id,groups.size);tapeLengths.push(0);}const tapeIndex=groups.get(id);tapeLengths[tapeIndex]++;return {x:p[0],y:p[1],angle:p[2]||0,rgb:cols[i],index:i,tapeIndex};});
+ return {leds,tapeLengths,discarded:raw-list.length,pitch};
 }
 const planCache=new Map();
 function plan(n){if(planCache.has(n))return planCache.get(n);const rev=new Uint32Array(n),cs=new Float64Array(n/2),sn=new Float64Array(n/2);for(let i=1,j=0;i<n;i++){let bit=n>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;rev[i]=j;}for(let i=0;i<n/2;i++){cs[i]=Math.cos(-2*PI*i/n);sn[i]=Math.sin(-2*PI*i/n);}const p={rev,cs,sn};planCache.set(n,p);return p;}
@@ -212,14 +243,14 @@ class Solver {
   }
   const stats=statistics(fields,mask,roiMask,nx,ny,dx,dy),warnings=[];
   if(!stats.validROI)roiMask.set(mask);
-  if(!leds.length)warnings.push('LEDがありません。配置条件を調整するか、自由配置でLEDを追加してください。');
-  if(geo.discarded)warnings.push(`輪郭外または端に近いLED候補 ${geo.discarded} 個を除外しました。`);
+  if(!leds.length)warnings.push('計算対象のLEDがありません。配置条件を調整するか、テープ配置をコピーしてください。');
+  if(geo.discarded)warnings.push(s.layout==='manual'?`輪郭外のLED ${geo.discarded} 個は計算から除外しています。接続と座標は保持しているため、テープ全体を輪郭内に移動してください。`:`輪郭外または端に近いLED候補 ${geo.discarded} 個を除外しました。`);
   if(Math.max(dx,dy)>s.gap/2)warnings.push('距離に対して計算格子が粗い条件です。高精細にするか、形状を小さくして再確認してください。');
   if(s.diffuse<99&&Math.max(dx,dy)>s.aperture/2)warnings.push('直接透過するLED像は格子解像度の影響を受けます。高精細で確認してください。');
   if(!stats.validROI)warnings.push('指定した端の除外幅では評価領域が残らないため、全面で集計しました。');
   if(s.diffuse<95)warnings.push('低拡散材の見え方は簡易的な正面直視モデルです。屈折・視差・レンズ像は再現しません。');
   if(s.shape==='ring'||s.shape==='ellipse')warnings.push('楕円輪郭の評価領域は、長短半径を除外幅だけ縮小・拡大した近似です。');
-  return {state:s,nx,ny,dx,dy,fields,irradiance,mask,roiMask,stats,leds,pitch:geo.pitch,warnings,ms:Date.now()-start};
+  return {state:s,nx,ny,dx,dy,fields,irradiance,mask,roiMask,stats,leds,tapeLengths:geo.tapeLengths,pitch:geo.pitch,warnings,ms:Date.now()-start};
  }
 }
 function rgba(result,display={}){
@@ -234,6 +265,6 @@ function rgba(result,display={}){
   for(let c=0;c<3;c++)out[i*4+c]=clamp(rgb[c]*255,0,255);out[i*4+3]=255;
  }return out;
 }
-const api={defaults,ledProfiles,profileAperture,selectLEDModel,ledDescription,normalize,shapeInfo,outline,parsePoints,makeLEDs,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
+const api={defaults,ledProfiles,profileAperture,selectLEDModel,ledDescription,normalize,shapeInfo,outline,parsePoints,makeLEDs,tapeLayout,tapeRanges,moveTape,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
 root.Optics=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof self!=='undefined'?self:globalThis);

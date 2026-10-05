@@ -38,6 +38,25 @@ def wait(page):
     page.wait_for_function('window.DiffusionLab && DiffusionLab.getResult() && !DiffusionLab.isBusy()', timeout=20000)
 def set_state(page, data):
     page.evaluate('(s)=>DiffusionLab.setState(s)',data);wait(page)
+
+def canvas_point(page,x,y):
+    page.locator('#mainCanvas').scroll_into_view_if_needed()
+    return page.evaluate('''([x,y])=>{
+        const r=document.getElementById('mainCanvas').getBoundingClientRect(),s=DiffusionLab.getState();
+        const scale=Math.min((r.width-120)/s.width,(r.height-108)/s.height);
+        return [r.left+r.width/2+x*scale,r.top+r.height/2+3+y*scale];
+    }''',[x,y])
+
+def taped_layout(page):
+    return page.evaluate('Optics.tapeLayout(DiffusionLab.getState())')
+
+def translated(before,after,tape,dx,dy):
+    start=sum(before['tapeLengths'][:tape]);end=start+before['tapeLengths'][tape]
+    return before['tapeLengths']==after['tapeLengths'] and all(
+        abs(b[0]-a[0]-(dx if start<=i<end else 0))<1e-9 and
+        abs(b[1]-a[1]-(dy if start<=i<end else 0))<1e-9 and b[2]==a[2]
+        for i,(a,b) in enumerate(zip(before['manual'],after['manual']))
+    ) and len(before['manual'])==len(after['manual'])
 with sync_playwright() as p:
     browser=p.chromium.launch(**launch_options())
     page=browser.new_page(viewport={'width':1536,'height':1100},device_scale_factor=1,accept_downloads=True)
@@ -86,13 +105,67 @@ with sync_playwright() as p:
     for layout in ['rows','grid','perimeter','ring','path']:
         set_state(page,{'layout':layout})
         check('LED layout: '+layout,page.evaluate('DiffusionLab.getResult().leds.length>0 && document.getElementById("errorBanner").hidden'))
-    # Manual editing in the layout canvas.
-    set_state(page,{'layout':'manual','manual':[],'view':'layout'})
-    box=page.locator('#mainCanvas').bounding_box()
-    page.mouse.click(box['x']+box['width']/2,box['y']+box['height']/2+3);wait(page)
-    check('Canvas click adds a manual LED',page.evaluate('DiffusionLab.getResult().leds.length===1'))
-    page.keyboard.down('Shift');page.mouse.click(box['x']+box['width']/2,box['y']+box['height']/2+3);page.keyboard.up('Shift');wait(page)
-    check('Shift-click removes a manual LED',page.evaluate('DiffusionLab.getResult().leds.length===0'))
+    # Whole-tape editing directly from an automatic layout, including capture and rollback.
+    set_state(page,{'shape':'rect','layout':'rows','width':160,'height':72,'rowSpacing':24,'density':60,'inset':8,'rotation':0,'packageSize':5.4,'view':'layout'})
+    initial=taped_layout(page)
+    check('Parallel tapes are selectable and coordinates require selection',initial['tapeLengths']==[9,9,9] and page.locator('#tapeSelect option').count()==4 and page.locator('#tapeX').is_disabled() and page.locator('#applyTapePosition').is_disabled())
+    page.mouse.click(*canvas_point(page,0,0))
+    check('Selecting a middle LED selects its entire tape without a jump or conversion',page.locator('#tapeSelect').input_value()=='1' and taped_layout(page)==initial and page.evaluate('DiffusionLab.getState().layout==="rows"') and not page.locator('#tapeX').is_disabled())
+    start=canvas_point(page,0,0);end=canvas_point(page,5,5)
+    page.mouse.move(*start);page.mouse.down();page.mouse.move(*end,steps=4)
+    check('Drag preview disables stale exports and leaves committed geometry untouched',page.locator('#pngBtn').is_disabled() and page.locator('#saveBtn').is_disabled() and page.locator('#tapeX').is_disabled() and taped_layout(page)==initial)
+    page.mouse.up();wait(page)
+    moved=taped_layout(page)
+    check('Dragging a middle LED translates only the connected tape',translated(initial,moved,1,5,5) and page.evaluate('DiffusionLab.getResult().state.layout==="manual"'))
+    colors=page.evaluate('DiffusionLab.getResult().leds.map(p=>[p.index,p.rgb,p.tapeIndex])')
+    page.locator('#tapeX').fill('65');page.locator('#tapeY').fill('-4');page.locator('#applyTapePosition').click();wait(page)
+    coordinates=taped_layout(page);anchor=moved['manual'][9]
+    check('X/Y apply moves the entire tape from its wiring-order first LED',translated(moved,coordinates,1,65-anchor[0],-4-anchor[1]) and coordinates['manual'][9][:2]==[65,-4] and page.locator('#tapeX').input_value()=='65')
+    check('Tape movement keeps all colors and LED indices in the calculation',page.evaluate('DiffusionLab.getResult().leds.map(p=>[p.index,p.rgb,p.tapeIndex])')==colors)
+    page.locator('#tapeX').fill('-120');page.locator('#applyTapePosition').click()
+    check('Outside coordinate entry rejects the complete move without clamping',taped_layout(page)==coordinates and page.locator('#tapeX').input_value()=='-120' and page.locator('#tapeX').get_attribute('aria-invalid')=='true' and 'テープ全体' in page.locator('#tapePositionStatus').inner_text())
+    page.locator('#tapeX').fill('');page.locator('#applyTapePosition').click()
+    check('Empty coordinates do not become zero or move a tape',taped_layout(page)==coordinates and '両方' in page.locator('#tapePositionStatus').inner_text())
+    page.locator('#tapeX').fill('63.5');page.locator('#tapeY').fill('-3.5');page.locator('#tapeY').press('Enter');wait(page)
+    coordinates=taped_layout(page)
+    check('Enter applies decimal coordinates and clears the validation error',coordinates['manual'][9][:2]==[63.5,-3.5] and page.locator('#tapeX').get_attribute('aria-invalid')=='false')
+    # Grab the connecting tape segment between LEDs, rather than an LED center.
+    segment_x=(coordinates['manual'][10][0]+coordinates['manual'][11][0])/2
+    start=canvas_point(page,segment_x,-3.5);end=canvas_point(page,segment_x+2,-1.5)
+    page.mouse.move(*start);page.mouse.down();page.mouse.move(*end,steps=3);page.mouse.up();wait(page)
+    segment_moved=taped_layout(page)
+    check('Dragging the tape between LEDs keeps the pointer offset',translated(coordinates,segment_moved,1,2,2))
+    start=canvas_point(page,segment_x+2,-1.5);end=canvas_point(page,segment_x+4,.5)
+    page.mouse.move(*start);page.mouse.down();page.mouse.move(*end,steps=3);page.keyboard.press('Escape');page.mouse.up()
+    check('Escape rolls back a drag preview and restores coordinate controls',taped_layout(page)==segment_moved and not page.locator('#tapeX').is_disabled() and not page.locator('#saveBtn').is_disabled())
+    page.mouse.move(*start);page.mouse.down();page.mouse.move(*end,steps=3)
+    page.locator('#mainCanvas').dispatch_event('pointercancel',{'pointerId':1})
+    page.mouse.up()
+    check('Pointer cancellation leaves the complete tape unchanged',taped_layout(page)==segment_moved and not page.locator('#saveBtn').is_disabled())
+    start=canvas_point(page,segment_x+2,-1.5);end=canvas_point(page,segment_x+150,-1.5)
+    page.mouse.move(*start);page.mouse.down();page.mouse.move(*end);page.mouse.up();wait(page)
+    check('An outside drag keeps the last valid tape position',taped_layout(page)==segment_moved)
+    page.mouse.click(*canvas_point(page,0,12))
+    check('Empty canvas click does not add an isolated LED',taped_layout(page)==segment_moved and page.locator('#tapeX').is_disabled())
+    page.locator('#tapeSelect').select_option('1')
+    check('Dropdown selects a whole tape and shows the first LED coordinates',page.locator('#tapeX').input_value()=='65.5' and page.locator('#tapeY').input_value()=='-1.5')
+    with page.expect_download(timeout=10000) as event:page.locator('#saveBtn').click()
+    event.value.save_as(str(ARTIFACTS/'test-tapes.json'))
+    set_state(page,{'layout':'rows'})
+    page.locator('#fileInput').set_input_files(ARTIFACTS/'test-tapes.json');page.wait_for_function('DiffusionLab.getState().layout==="manual"');wait(page)
+    check('JSON round trip preserves tape connections and coordinates',taped_layout(page)==segment_moved)
+    if not args.embedded:
+        page.reload(wait_until='load');wait(page)
+        check('Connected tapes persist across a real HTTP reload',taped_layout(page)==segment_moved)
+    page.locator('#tapeSelect').select_option('1')
+    page.evaluate('document.getElementById("sidebar").scrollTop=document.getElementById("tapeEditor").offsetTop-80')
+    page.screenshot(path=str(ARTIFACTS/'preview-tape-editor.png'),full_page=True)
+    page.locator('#clearManual').click();wait(page)
+    check('Clearing tapes disables position entry and produces zero light',page.evaluate('DiffusionLab.getResult().leds.length===0 && DiffusionLab.getResult().stats.mean===0 && DiffusionLab.getState().tapeLengths.length===0') and page.locator('#tapeX').is_disabled())
+    # A legacy free arrangement stays connected as one unit.
+    old_tape={'schemaVersion':1,'state':{'width':120,'height':60,'gap':7,'shape':'rect','layout':'manual','manual':[[-20,-10,0],[0,-10,0],[0,10,1.57]],'view':'layout','quality':160}}
+    page.locator('#fileInput').set_input_files({'name':'old-tape.json','mimeType':'application/json','buffer':json.dumps(old_tape).encode()});page.wait_for_function('DiffusionLab.getState().manual.length===3');wait(page)
+    check('Legacy individual coordinates are treated as one connected tape',taped_layout(page)['tapeLengths']==[3] and page.locator('#tapeSelect option').count()==2)
     # Successful and rejected JSON imports.
     valid={'schemaVersion':1,'state':{'width':120,'height':36,'gap':7,'layout':'rows','rowSpacing':100,'quality':160}}
     page.locator('#fileInput').set_input_files({'name':'valid.json','mimeType':'application/json','buffer':json.dumps(valid).encode()});page.wait_for_function('DiffusionLab.getState().width===120');wait(page)
@@ -137,7 +210,7 @@ with sync_playwright() as p:
     check('No JavaScript runtime errors',not errors)
     check('No external network requests',not [u for u in requests if u.startswith(('http://','https://')) and (server is None or not u.startswith(server.url))])
     # Responsive layout.
-    mobile=browser.new_page(viewport={'width':390,'height':844},device_scale_factor=1)
+    mobile=browser.new_page(viewport={'width':390,'height':844},device_scale_factor=1,has_touch=True,is_mobile=True)
     mobile.on('pageerror',lambda e:errors.append(str(e)))
     load(mobile)
     check('Mobile has no horizontal overflow',mobile.evaluate('document.documentElement.scrollWidth <= innerWidth'))
@@ -146,6 +219,19 @@ with sync_playwright() as p:
     check('Mobile LED controls and source notes fit the viewport',mobile.evaluate('document.documentElement.scrollWidth <= innerWidth') and '資料未記載・仮定' in mobile.locator('#ledValueSummary').inner_text())
     mobile.locator('#mobileToggle').click()
     mobile.screenshot(path=str(ARTIFACTS/'preview-mobile.png'),full_page=True)
+    set_state(mobile,{'shape':'rect','layout':'rows','width':160,'height':72,'density':60,'rowSpacing':24,'rotation':0,'packageSize':5.4,'view':'layout','quality':160})
+    mobile_initial=taped_layout(mobile)
+    start=canvas_point(mobile,0,0);end=canvas_point(mobile,3,3)
+    touch=mobile.context.new_cdp_session(mobile)
+    touch.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':start[0],'y':start[1]}]})
+    touch.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':end[0],'y':end[1]}]})
+    touch.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]});wait(mobile)
+    mobile_moved=taped_layout(mobile)
+    check('Mobile touch drag moves a complete tape and keeps other tapes fixed',translated(mobile_initial,mobile_moved,1,3,3))
+    mobile.locator('#mobileToggle').click();mobile.locator('#tapeSelect').select_option('1')
+    mobile.locator('#tapeX').fill('68');mobile.locator('#tapeY').fill('2');mobile.locator('#applyTapePosition').click();wait(mobile)
+    check('Mobile tape coordinates apply and the editor fits the viewport',taped_layout(mobile)['manual'][9][:2]==[68,2] and mobile.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+    mobile.screenshot(path=str(ARTIFACTS/'preview-mobile-tape-editor.png'),full_page=True)
     check('No mobile JavaScript runtime errors',not errors)
     # Standalone/offline payload still calculates after the page has been loaded.
     offline=browser.new_page()

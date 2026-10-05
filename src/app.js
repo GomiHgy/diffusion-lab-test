@@ -3,7 +3,7 @@
 const $=id=>document.getElementById(id), O=Optics, KEY='diffusion-lab-v1';
 let state=O.normalize(), result=null, baseline=null, worker=null, busy=false, pending=null, latest=0, timer=null, toastTimer=null;
 let sweepWorker=null,sweepResults=[],sweepKey='',sweepRun=0,sweepComplete=false;
-let map=null,dragIndex=-1,drawingPath=false,pathDraft=[],lastAutoLEDs=[];
+let map=null,selectedTape=-1,dragTape=null,drawingPath=false,pathDraft=[],lastAutoLayout={manual:[],tapeLengths:[]};
 try{const saved=localStorage.getItem(KEY);if(saved)state=O.normalize(JSON.parse(saved));}catch(_){/* Private/file contexts may deny storage. */}
 const displayKeys=new Set(['view','exposure','tone','ambient','showLED','showGrid','whiteLevel','target','customLabel']);
 const materialPresets={opal:{argb:'#FFFFFFFF',thickness:3,transmission:45,diffuse:100,spread:.65},strong:{argb:'#FFFFFFFF',thickness:3,transmission:30,diffuse:100,spread:1.1},frost:{argb:'#FFFFFFFF',thickness:2,transmission:82,diffuse:90,spread:.2},clear:{argb:'#00FFFFFF',thickness:2,transmission:92,diffuse:0,spread:0},foam:{argb:'#FFFFFEF5',thickness:3,transmission:25,diffuse:100,spread:1.25}};
@@ -25,11 +25,11 @@ function onWorkerMessage(e){
  const data=e.data;if(data.type!=='result'&&data.type!=='error')return;busy=false;
  if(data.id===latest){
   if(data.type==='error'){error(data.message);status('入力を確認してください','error');$('initialLoading').hidden=true;$('progress').style.width='0';}
-  else{result=data.result;error('');$('initialLoading').hidden=true;$('progress').style.width='100%';setTimeout(()=>{if(!busy&&!pending)$('progress').style.width='0';},250);status('READY · '+format(result.ms/1000,2)+' s');if(state.layout!=='manual')lastAutoLEDs=result.leds.map(p=>[p.x,p.y,p.angle]);renderAll();}
+  else{result=data.result;error('');$('initialLoading').hidden=true;$('progress').style.width='100%';setTimeout(()=>{if(!busy&&!pending)$('progress').style.width='0';},250);status('READY · '+format(result.ms/1000,2)+' s');if(state.layout!=='manual')lastAutoLayout=O.tapeLayout(state);renderAll();}
  }
  toggleExport();if(pending)sendPending();
 }
-function toggleExport(){const disabled=!result||busy||pending!==null||!$('errorBanner').hidden;for(const id of ['pngBtn','csvBtn','pinBtn','autoExposure'])$(id).disabled=disabled;}
+function toggleExport(){const disabled=!result||busy||pending!==null||!!dragTape||!$('errorBanner').hidden;for(const id of ['pngBtn','csvBtn','pinBtn','autoExposure'])$(id).disabled=disabled;$('saveBtn').disabled=!!dragTape;$('sweepBtn').disabled=!!dragTape||!!sweepWorker;}
 function designKey(s){const a={...s};for(const k of displayKeys)delete a[k];delete a.gap;delete a.quality;return JSON.stringify(a);}
 function clearSweepForChange(){if(sweepKey&&sweepKey!==designKey(state)){cancelSweep(false);sweepResults=[];sweepKey='';sweepComplete=false;$('sweepBottom').hidden=true;$('comparisonTiles').replaceChildren();const div=document.createElement('div');div.className='empty-comparison';div.textContent='条件が変わりました。「6つの距離を計算」で再比較してください。';$('comparisonTiles').appendChild(div);$('sweepStatus').textContent='過去の比較を破棄しました。距離以外の設定をそろえて再計算します。';}}
 function syncControls(){
@@ -42,7 +42,7 @@ function syncControls(){
  $('materialPicker').value='#'+state.argb.slice(3);
  $('heatKey').style.display=state.view==='heat'?'block':'none';
  $('canvasLabel').textContent=state.view==='layout'?'LED LAYOUT · X → / Y ↓':state.view==='heat'?'LUMINANCE MAP · IMAGE P95 SCALE':'FRONT VIEW · PARALLEL PLANES';
- syncLEDSpec();
+ syncLEDSpec();syncTapeEditor();
 }
 function syncLEDSpec(){
  const p=O.ledProfiles[state.ledModel],description=O.ledDescription(state);
@@ -61,16 +61,18 @@ function syncLEDSpec(){
  const link=document.createElement('a');link.href=p.datasheetUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='参照データシートを開く';$('ledSpecDetails').appendChild(link);
 }
 function applyChange(key,value){
+ cancelTapeDrag();
  const previous=state.layout;
+ if(key==='layout'&&value==='manual'&&previous!=='manual'){try{lastAutoLayout=O.tapeLayout(state);Object.assign(state,structuredClone(lastAutoLayout));}catch(e){toast(e.message);return;}}
  if(key==='ledModel')state=O.selectLEDModel(state,value);
  if(key==='material'&&materialPresets[value])Object.assign(state,materialPresets[value]);
  state[key]=value;
  if(['argb','thickness','transmission','diffuse','spread'].includes(key))state.material='custom';
  if(key==='layout'&&value==='manual'){
-  if(previous!=='manual'&&result)lastAutoLEDs=result.leds.map(p=>[p.x,p.y,p.angle]);
-  if(state.manual.length===0&&lastAutoLEDs.length)state.manual=structuredClone(lastAutoLEDs);
   state.view='layout';
  }
+ if(key==='layout')selectedTape=-1;
+ if(state.layout!=='path'||state.view!=='layout'){drawingPath=false;pathDraft=[];}
  state=O.normalize(state);persist();syncControls();
  if(displayKeys.has(key)){renderAll();return;}
  clearSweepForChange();drawSection();if(state.view==='layout')drawMain();requestCompute(key==='polygon'||key==='path'?550:140);
@@ -99,7 +101,7 @@ $('scenePreset').addEventListener('change',e=>{
  if(scene==='ring'){s=O.selectLEDModel(s,'WS2812C-2020');Object.assign(s,{width:100,height:100,shape:'ring',hole:.5,layout:'ring',inset:12,density:150,pattern:'rainbow',gap:8,roi:2});}
  if(scene==='foam')Object.assign(s,{width:140,height:28,layout:'rows',rowSpacing:100,density:144,pattern:'solid',color1:'#ffffff',gap:5,roi:2,material:'foam',...materialPresets.foam});
  if(scene==='rgb')Object.assign(s,{width:40,height:24,layout:'rows',rowSpacing:100,density:150,pattern:'solid',color1:'#ffffff',gap:1,splitRGB:true,material:'custom',transmission:75,diffuse:100,spread:0,roi:1,quality:448,exposure:-3});
- state=O.normalize(s);drawingPath=false;pathDraft=[];persist();syncControls();clearSweepForChange();requestCompute(0);e.target.value='';
+ resetTapeEditor();state=O.normalize(s);persist();syncControls();clearSweepForChange();requestCompute(0);e.target.value='';
 });
 function fitCanvas(canvas){const rect=canvas.getBoundingClientRect();const w=Math.max(10,rect.width),h=Math.max(10,rect.height),dpr=Math.min(window.devicePixelRatio||1,2);if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);return {ctx,w,h};}
 function polygonPath(ctx,s,ox,oy,scale){ctx.beginPath();const p=O.outline(s);p.forEach((v,i)=>{const x=ox+v[0]*scale,y=oy+v[1]*scale;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.closePath();if(s.shape==='ring'){ctx.moveTo(ox+s.width/2*s.hole*scale,oy);ctx.ellipse(ox,oy,s.width/2*s.hole*scale,s.height/2*s.hole*scale,0,0,Math.PI*2);}}
@@ -119,7 +121,11 @@ function drawDimensions(ctx,s,m){if(!state.showGrid)return;const y=m.y-17,x=m.x-
 function drawLEDs(ctx,leds,s,m,overlay=false){
  if(!overlay&&leds.length){
   ctx.strokeStyle='#9aa6b11b';ctx.lineWidth=Math.max(2,(s.packageSize+2)*m.scale);ctx.lineCap='round';
-  ctx.beginPath();let prev=null;for(const p of leds){if(prev&&Math.hypot(p.x-prev.x,p.y-prev.y)<1000/s.density*1.75)ctx.lineTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale);else ctx.moveTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale);prev=p;}ctx.stroke();
+  ctx.beginPath();let prev=null;for(const p of leds){if(prev&&prev.tapeIndex===p.tapeIndex)ctx.lineTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale);else ctx.moveTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale);prev=p;}ctx.stroke();
+  const selected=leds.filter(p=>p.tapeIndex===selectedTape);ctx.strokeStyle='#71e5cf';ctx.lineWidth=2;
+  ctx.beginPath();selected.forEach((p,i)=>i?ctx.lineTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale):ctx.moveTo(m.ox+p.x*m.scale,m.oy+p.y*m.scale));ctx.stroke();
+  for(const p of selected){const bs=Math.max(2,s.packageSize*m.scale)+6;ctx.save();ctx.translate(m.ox+p.x*m.scale,m.oy+p.y*m.scale);ctx.rotate(p.angle);ctx.strokeRect(-bs/2,-bs/2,bs,bs);ctx.restore();}
+  if(selected.length){const p=selected[0];ctx.fillStyle='#71e5cf';ctx.font='10px system-ui,sans-serif';ctx.fillText('テープ '+(selectedTape+1)+' · 先頭',m.ox+p.x*m.scale+8,m.oy+p.y*m.scale-12);}
  }
  for(const p of leds){const x=m.ox+p.x*m.scale,y=m.oy+p.y*m.scale,bs=Math.max(2,s.packageSize*m.scale),ap=Math.max(1,s.aperture*m.scale);ctx.save();ctx.translate(x,y);ctx.rotate(p.angle);if(overlay){ctx.strokeStyle='#ffffff90';ctx.lineWidth=1;ctx.strokeRect(-bs/2,-bs/2,bs,bs);ctx.fillStyle='#ffffff66';ctx.fillRect(-1,-1,2,2);}else{ctx.fillStyle='#c9c6b4';ctx.fillRect(-bs/2,-bs/2,bs,bs);ctx.fillStyle='#202126';ctx.fillRect(-ap/2,-ap/2,ap,ap);const rgb=p.rgb.map(v=>Math.round(O.linearToSrgb(v)*255));ctx.fillStyle=`rgb(${rgb.join(',')})`;ctx.fillRect(-ap*.35,-ap*.35,ap*.7,ap*.7);}ctx.restore();
   if(!overlay&&leds.length<=90&&m.scale>2){ctx.font='8px ui-monospace,Consolas,monospace';ctx.fillStyle='#71819c';ctx.textAlign='center';ctx.fillText(p.index+1,x,y+bs/2+10);ctx.textAlign='left';}
@@ -127,7 +133,7 @@ function drawLEDs(ctx,leds,s,m,overlay=false){
 }
 function drawMain(){
  const {ctx,w,h}=fitCanvas($('mainCanvas'));let s=result?result.state:state,leds=result?result.leds:[];
- if(state.view==='layout'){s=state;try{leds=O.makeLEDs(state).leds;}catch(_){}}
+ if(state.view==='layout'){s=state;try{const layout=dragTape?dragTape.preview:O.tapeLayout(state),colors=O.ledColors(state,layout.manual.length);leds=[];for(const tape of O.tapeRanges(layout))for(let i=tape.start;i<tape.start+tape.length;i++){const p=layout.manual[i];leds.push({x:p[0],y:p[1],angle:p[2],rgb:colors[i],index:i,tapeIndex:tape.index});}}catch(_){}}
  const scale=Math.min((w-120)/s.width,(h-108)/s.height),bw=s.width*scale,bh=s.height*scale;
  const m={scale,x:(w-bw)/2,y:(h-bh)/2+3,w:bw,h:bh,ox:w/2,oy:h/2+3};map={...m,state:s};drawGrid(ctx,w,h,s,m);
  if(state.view==='layout'){
@@ -136,7 +142,7 @@ function drawMain(){
  drawDimensions(ctx,s,m);
  if(drawingPath){ctx.strokeStyle='#71e5cf';ctx.lineWidth=2;ctx.beginPath();pathDraft.forEach((p,i)=>i?ctx.lineTo(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale):ctx.moveTo(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale));ctx.stroke();ctx.fillStyle='#71e5cf';for(const p of pathDraft){ctx.beginPath();ctx.arc(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale,4,0,Math.PI*2);ctx.fill();}}
  $('dimensionLabel').textContent=format(s.width,0)+' × '+format(s.height,0)+' mm';
- $('gridLabel').textContent=drawingPath?'クリックで点を追加 · Enterで確定':state.view==='layout'&&state.layout==='manual'?'追加 / ドラッグ移動 / Shiftで削除':result?format(result.dx,2)+' × '+format(result.dy,2)+' mm / 計算セル':'未校正モデル';
+ $('gridLabel').textContent=drawingPath?'クリックで点を追加 · Enterで確定':state.view==='layout'?'テープを選択 / ドラッグで全体を移動':result?format(result.dx,2)+' × '+format(result.dy,2)+' mm / 計算セル':'未校正モデル';
  if(result)$('heatUpper').textContent=format(result.stats.p95,1)+' cd/m²';
 }
 function drawProfile(){const {ctx,w,h}=fitCanvas($('profileCanvas'));ctx.clearRect(0,0,w,h);if(!result)return;const pr=result.stats.profile,top=17,bottom=h-24,left=43,right=w-10;let max=0;for(const p of pr)if(p)max=Math.max(max,p[0]+p[1]+p[2]);max=max||1;
@@ -150,7 +156,7 @@ function drawSection(){const {ctx,w,h}=fitCanvas($('sectionCanvas'));ctx.clearRe
  for(let i=0;i<5;i++){const x=x0+14+i*(x1-x0-28)/4,spread=Math.min((x1-x0)/2,s.gap*Math.tan(s.angle*Math.PI/360)*.8);ctx.beginPath();ctx.moveTo(x,chipY);ctx.lineTo(Math.max(x0,x-spread),top);ctx.lineTo(Math.min(x1,x+spread),top);ctx.closePath();ctx.fillStyle=colors[i%2]+'13';ctx.fill();ctx.strokeStyle=colors[i%2]+'36';ctx.stroke();ctx.fillStyle='#d5d1b9';ctx.fillRect(x-4,chipY-2,8,4);}
  ctx.fillStyle='#353b4c';ctx.fillRect(x0,chipY+4,x1-x0,4);ctx.fillStyle='#77839e';ctx.fillText('LED発光面 / 非反射ベース',x0,chipY+23);
  const xx=x1+13;ctx.strokeStyle='#a99aff';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(xx,top);ctx.lineTo(xx,chipY);ctx.moveTo(xx-3,top+4);ctx.lineTo(xx,top);ctx.lineTo(xx+3,top+4);ctx.moveTo(xx-3,chipY-4);ctx.lineTo(xx,chipY);ctx.lineTo(xx+3,chipY-4);ctx.stroke();ctx.fillStyle='#c4b9ff';ctx.font='11px ui-monospace,Consolas,monospace';ctx.fillText(format(s.gap,1),xx+8,(top+chipY)/2);ctx.font='9px ui-monospace,Consolas,monospace';ctx.fillText('mm',xx+8,(top+chipY)/2+13);}
-function updateMetrics(){if(!result)return;const r=result,st=r.stats;metric('metricUniform',st.robust===null?'—':format(st.robust*100,1),'%');metric('metricMean',format(st.mean,1),'cd/m²');metric('metricLED',format(r.leds.length,0),'個');metric('metricRatio',format(r.state.gap/r.pitch,2),'×');$('roiLabel').textContent=st.validROI?'端から '+format(r.state.roi,1)+' mm を除いて評価':'評価領域なし → 全面で評価';$('pitchLabel').textContent=state.layout==='manual'?'自由配置 · 基準ピッチ '+format(r.pitch,2)+' mm':format(r.pitch,2)+' mm pitch';$('warnings').replaceChildren();for(const text of r.warnings){const div=document.createElement('div');div.textContent='△ '+text;$('warnings').appendChild(div);}if(state.layout==='manual'){const div=document.createElement('div');div.textContent='△ 自由配置時のピッチ・距離比は密度入力からの基準値です。実際のLED間隔を表しません。';$('warnings').appendChild(div);}}
+function updateMetrics(){if(!result)return;const r=result,st=r.stats;metric('metricUniform',st.robust===null?'—':format(st.robust*100,1),'%');metric('metricMean',format(st.mean,1),'cd/m²');metric('metricLED',format(r.leds.length,0),'個');metric('metricRatio',format(r.state.gap/r.pitch,2),'×');$('roiLabel').textContent=st.validROI?'端から '+format(r.state.roi,1)+' mm を除いて評価':'評価領域なし → 全面で評価';$('pitchLabel').textContent=state.layout==='manual'?'テープ位置調整 · 基準ピッチ '+format(r.pitch,2)+' mm':format(r.pitch,2)+' mm pitch';$('warnings').replaceChildren();for(const text of r.warnings){const div=document.createElement('div');div.textContent='△ '+text;$('warnings').appendChild(div);}if(state.layout==='manual'){const div=document.createElement('div');div.textContent='△ テープ位置調整時のピッチ・距離比は密度入力からの基準値です。実際のLED間隔を表しません。';$('warnings').appendChild(div);}}
 function drawSmall(canvas,r){if(!r)return;const {ctx,w,h}=fitCanvas(canvas);ctx.fillStyle='#0b0e14';ctx.fillRect(0,0,w,h);drawSurface(ctx,r,{x:8,y:8,w:w-16,h:h-16},displayOptions());}
 function summary(r){return `${format(r.state.width,0)}×${format(r.state.height,0)} mm · d=${format(r.state.gap,2)} mm · ${r.leds.length} LED · 均一さ ${r.stats.robust===null?'—':format(r.stats.robust*100,1)}% · ${format(r.stats.mean,1)} cd/m²`;}
 function drawBaseline(){if(!baseline||!result)return;drawSmall($('baselineCanvas'),baseline);drawSmall($('currentSmallCanvas'),result);$('baselineLabel').textContent=summary(baseline);$('currentSmallLabel').textContent=summary(result);}
@@ -182,27 +188,69 @@ $('pinBtn').addEventListener('click',()=>{if(!result||busy||pending)return;basel
 $('clearBaseline').addEventListener('click',()=>{baseline=null;$('baselineCard').hidden=true;});
 $('autoExposure').addEventListener('click',()=>{if(!result||result.stats.p95<=1e-9){toast('光がないため、露出を調整できません。');return;}let max=0;const tmp=[];for(let i=0;i<result.mask.length;i++)if(result.mask[i])tmp.push(Math.max(...result.fields.map((f,c)=>f[i]/O.Y[c])));tmp.sort((a,b)=>a-b);max=tmp[Math.floor((tmp.length-1)*.95)]||1;applyChange('exposure',O.clamp(Math.round(Math.log2(state.whiteLevel*.9/max)*10)/10,-6,6));toast('この条件に合わせて露出を調整しました。以後の距離変更では固定されます。');});
 function mousePoint(e){const rect=$('mainCanvas').getBoundingClientRect();return {x:(e.clientX-rect.left-map.ox)/map.scale,y:(e.clientY-rect.top-map.oy)/map.scale};}
+function editorLayout(){try{return dragTape?dragTape.preview:O.tapeLayout(state);}catch(_){return {manual:[],tapeLengths:[]};}}
+function tapeMessage(text='',invalid=false){$('tapePositionStatus').textContent=text;$('tapePositionStatus').classList.toggle('invalid',invalid);for(const id of ['tapeX','tapeY'])$(id).setAttribute('aria-invalid',String(invalid));}
+function syncTapeEditor(){
+ const layout=editorLayout(),tapes=O.tapeRanges(layout),select=$('tapeSelect');
+ const signature=JSON.stringify(layout.tapeLengths);
+ if(select.dataset.signature!==signature){select.replaceChildren(new Option('テープを選択','-1'));for(const tape of tapes)select.add(new Option(`テープ ${tape.index+1} · ${tape.length} LED`,String(tape.index)));select.dataset.signature=signature;}
+ if(!tapes[selectedTape])selectedTape=-1;select.value=String(selectedTape);
+ select.disabled=!tapes.length||!!dragTape||drawingPath;
+ const tape=tapes[selectedTape],disabled=!tape||!!dragTape||drawingPath;
+ for(const id of ['tapeX','tapeY','applyTapePosition'])$(id).disabled=disabled;
+ $('convertManual').disabled=!lastAutoLayout.manual.length||!!dragTape;$('clearManual').disabled=!state.manual.length||!!dragTape;
+ const anchor=tape?layout.manual[tape.start]:null;
+ $('tapeX').value=anchor?Number(anchor[0].toFixed(3)):'';$('tapeY').value=anchor?Number(anchor[1].toFixed(3)):'';
+ tapeMessage(drawingPath?'経路を確定するとテープを移動できます。':tape?`${tape.length} LEDを接続したまま移動します。`:'画面上のテープ、または上の一覧から選択してください。');
+}
+function cancelTapeDrag(){
+ if(!dragTape)return;const id=dragTape.pointerId;dragTape=null;if($('mainCanvas').hasPointerCapture(id))$('mainCanvas').releasePointerCapture(id);toggleExport();
+}
+function resetTapeEditor(){cancelTapeDrag();selectedTape=-1;drawingPath=false;pathDraft=[];}
+function commitTapeLayout(layout){
+ cancelTapeDrag();drawingPath=false;pathDraft=[];Object.assign(state,layout,{layout:'manual',view:'layout'});state=O.normalize(state);persist();syncControls();clearSweepForChange();drawMain();requestCompute(0);
+}
+function applyTapePosition(){
+ if(dragTape||drawingPath||state.view!=='layout')return;
+ const layout=editorLayout();
+ if(!$('tapeX').value.trim()||!$('tapeY').value.trim()){tapeMessage('X・Yの両方に数値を入力してください。',true);return;}
+ try{const moved=O.moveTape(state,layout,selectedTape,Number($('tapeX').value),Number($('tapeY').value));commitTapeLayout(moved);}catch(e){tapeMessage(e.message,true);}
+}
+$('tapeSelect').addEventListener('change',e=>{selectedTape=Number(e.target.value);syncTapeEditor();drawMain();});
+$('applyTapePosition').addEventListener('click',applyTapePosition);
+for(const id of ['tapeX','tapeY'])$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyTapePosition();}});
+function segmentDistance(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],t=O.clamp(((p.x-a[0])*dx+(p.y-a[1])*dy)/(dx*dx+dy*dy||1),0,1);return Math.hypot(p.x-a[0]-t*dx,p.y-a[1]-t*dy);}
 $('mainCanvas').addEventListener('pointerdown',e=>{
- if(!map||state.view!=='layout')return;const p=mousePoint(e);let inside;try{inside=O.shapeInfo(state).inside(p.x,p.y);}catch(_){return;}if(!inside)return;
- if(drawingPath){pathDraft.push([Math.round(p.x*10)/10,Math.round(p.y*10)/10]);drawMain();return;}
- if(state.layout!=='manual')return;e.preventDefault();const threshold=Math.max(state.packageSize,10/map.scale);let nearest=-1,best=Infinity;state.manual.forEach((q,i)=>{const d=Math.hypot(p.x-q[0],p.y-q[1]);if(d<best){nearest=i;best=d;}});
- if(e.shiftKey){if(best<threshold){state.manual.splice(nearest,1);applyChange('manual',state.manual);}return;}
- if(best<threshold){dragIndex=nearest;$('mainCanvas').setPointerCapture(e.pointerId);}else if(state.manual.length<5000){state.manual.push([Math.round(p.x*10)/10,Math.round(p.y*10)/10,0]);applyChange('manual',state.manual);}else toast('LEDは5,000個まで配置できます。');
+ if(!map||state.view!=='layout'||!e.isPrimary||e.button!==0||dragTape)return;const p=mousePoint(e);
+ if(drawingPath){try{if(!O.shapeInfo(state).inside(p.x,p.y))return;}catch(_){return;}pathDraft.push([Math.round(p.x*10)/10,Math.round(p.y*10)/10]);drawMain();return;}
+ const layout=editorLayout(),threshold=Math.max(state.packageSize/2+2,10/map.scale);let nearest=-1,best=Infinity;
+ for(const tape of O.tapeRanges(layout))for(let i=tape.start;i<tape.start+tape.length;i++){const q=layout.manual[i],d=i>tape.start?segmentDistance(p,layout.manual[i-1],q):Math.hypot(p.x-q[0],p.y-q[1]);if(d<best){nearest=tape.index;best=d;}}
+ selectedTape=best<threshold?nearest:-1;
+ if(selectedTape>=0){e.preventDefault();dragTape={pointerId:e.pointerId,index:selectedTape,start:p,original:layout,preview:layout,moved:false};$('mainCanvas').setPointerCapture(e.pointerId);toggleExport();}
+ syncTapeEditor();drawMain();
 });
-$('mainCanvas').addEventListener('pointermove',e=>{if(dragIndex<0||state.layout!=='manual'||!map)return;const p=mousePoint(e);if(!O.shapeInfo(state).inside(p.x,p.y))return;state.manual[dragIndex]=[Math.round(p.x*10)/10,Math.round(p.y*10)/10,state.manual[dragIndex][2]||0];drawMain();});
-function endDrag(){if(dragIndex>=0){dragIndex=-1;applyChange('manual',state.manual);}}
-$('mainCanvas').addEventListener('pointerup',endDrag);$('mainCanvas').addEventListener('pointercancel',endDrag);
-$('convertManual').addEventListener('click',()=>{state.manual=structuredClone(lastAutoLEDs);state.view='layout';applyChange('layout','manual');});
-$('clearManual').addEventListener('click',()=>applyChange('manual',[]));
-$('pathDrawBtn').addEventListener('click',()=>{drawingPath=true;pathDraft=[];applyChange('view','layout');toast('輪郭内をクリックして経路の点を追加します。Enterで確定、Escapeで取り消します。');});
+$('mainCanvas').addEventListener('pointermove',e=>{
+ if(!dragTape||e.pointerId!==dragTape.pointerId||!map)return;const p=mousePoint(e),d=dragTape,range=O.tapeRanges(d.original)[d.index],anchor=d.original.manual[range.start];
+ // 基準スナップショットから移動量を計算し、累積誤差やつかんだ瞬間のジャンプを防ぐ。
+ const dx=Math.round((p.x-d.start.x)*10)/10,dy=Math.round((p.y-d.start.y)*10)/10;
+ if(!d.moved&&Math.hypot(dx,dy)*map.scale<3)return;
+ try{d.preview=O.moveTape(state,d.original,d.index,anchor[0]+dx,anchor[1]+dy);d.moved=dx!==0||dy!==0;syncTapeEditor();drawMain();}catch(e){tapeMessage(e.message,true);}
+});
+function endTapeDrag(e){if(!dragTape||e.pointerId!==dragTape.pointerId)return;const d=dragTape;cancelTapeDrag();if(d.moved)commitTapeLayout(d.preview);else{syncTapeEditor();drawMain();}}
+$('mainCanvas').addEventListener('pointerup',endTapeDrag);
+function discardTapeDrag(e){if(dragTape&&(!e||e.pointerId===dragTape.pointerId)){cancelTapeDrag();syncTapeEditor();drawMain();}}
+$('mainCanvas').addEventListener('pointercancel',discardTapeDrag);$('mainCanvas').addEventListener('lostpointercapture',discardTapeDrag);
+$('convertManual').addEventListener('click',()=>{selectedTape=-1;commitTapeLayout(structuredClone(lastAutoLayout));});
+$('clearManual').addEventListener('click',()=>{selectedTape=-1;commitTapeLayout({manual:[],tapeLengths:[]});});
+$('pathDrawBtn').addEventListener('click',()=>{applyChange('view','layout');drawingPath=true;pathDraft=[];syncTapeEditor();drawMain();toast('輪郭内をクリックして経路の点を追加します。Enterで確定、Escapeで取り消します。');});
 function finishPath(){if(!drawingPath)return;if(pathDraft.length<2){toast('経路には2点以上が必要です。');return;}drawingPath=false;applyChange('path',pathDraft.map(p=>p.join(',')).join('\n'));pathDraft=[];drawMain();}
 $('pathFinishBtn').addEventListener('click',finishPath);
-window.addEventListener('keydown',e=>{if(e.key==='Escape'){if(drawingPath){drawingPath=false;pathDraft=[];drawMain();toast('経路の描画を取り消しました。');}closeModal();}if(e.key==='Enter'&&drawingPath&&document.activeElement.tagName!=='TEXTAREA')finishPath();});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){discardTapeDrag();if(drawingPath){drawingPath=false;pathDraft=[];syncTapeEditor();drawMain();toast('経路の描画を取り消しました。');}closeModal();}if(e.key==='Enter'&&drawingPath&&document.activeElement.tagName!=='TEXTAREA')finishPath();});
 function download(name,blob){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);}
 const stamp=()=>new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
 $('saveBtn').addEventListener('click',()=>{download('diffusion-settings-'+stamp()+'.json',new Blob([JSON.stringify({app:'Diffusion Lab',schemaVersion:2,savedAt:new Date().toISOString(),state},null,2)],{type:'application/json'}));toast('設定JSONを保存しました。');});
 $('loadBtn').addEventListener('click',()=>$('fileInput').click());
-$('fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>2*1024*1024)throw Error('設定ファイルは2 MB以下にしてください。');const data=JSON.parse(await f.text());if(data.schemaVersion&&![1,2].includes(data.schemaVersion))throw Error('この設定ファイルの版には対応していません。');const s=data.state||data;if(!s||typeof s!=='object'||Array.isArray(s)||!('width' in s)||!('gap' in s))throw Error('Diffusion Labの設定JSONではありません。');const loaded=O.normalize(s);O.makeLEDs(loaded);state=loaded;persist();syncControls();clearSweepForChange();requestCompute(0);toast('設定を読み込みました。');}catch(error){toast('読み込みできません: '+error.message);}finally{e.target.value='';}});
+$('fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>2*1024*1024)throw Error('設定ファイルは2 MB以下にしてください。');const data=JSON.parse(await f.text());if(data.schemaVersion&&![1,2].includes(data.schemaVersion))throw Error('この設定ファイルの版には対応していません。');const s=data.state||data;if(!s||typeof s!=='object'||Array.isArray(s)||!('width' in s)||!('gap' in s))throw Error('Diffusion Labの設定JSONではありません。');const loaded=O.normalize(s);O.makeLEDs(loaded);resetTapeEditor();state=loaded;persist();syncControls();clearSweepForChange();requestCompute(0);toast('設定を読み込みました。');}catch(error){toast('読み込みできません: '+error.message);}finally{e.target.value='';}});
 $('csvBtn').addEventListener('click',()=>{if(!result)return;const r=result,lines=['x_mm,y_mm,in_evaluation_region,R_cd_m2,G_cd_m2,B_cd_m2,total_cd_m2,incident_total_lux'];for(let y=0;y<r.ny;y++)for(let x=0;x<r.nx;x++){const i=y*r.nx+x;if(!r.mask[i])continue;const v=r.fields.map(f=>f[i]);lines.push([(x+.5)*r.dx-r.state.width/2,(y+.5)*r.dy-r.state.height/2,r.roiMask[i],...v,v[0]+v[1]+v[2],r.irradiance.reduce((sum,f)=>sum+f[i],0)].map(n=>typeof n==='number'?Number(n.toPrecision(8)):n).join(','));}download('diffusion-grid-'+stamp()+'.csv',new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));toast('線形データをCSVで保存しました。');});
 $('pngBtn').addEventListener('click',()=>{
  if(!result)return;const r=result,c=document.createElement('canvas');c.width=1600;c.height=1060;const ctx=c.getContext('2d');ctx.fillStyle='#10131a';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#eef0f8';ctx.font='bold 34px system-ui,sans-serif';ctx.fillText('Diffusion Lab — LED 面発光シミュレーション',64,76);ctx.fillStyle='#a0a9bf';ctx.font='18px system-ui,sans-serif';ctx.fillText('正面・平行平面の近似 / 未校正 / 同一露出で比較',64,113);ctx.fillStyle='#0b0e14';ctx.fillRect(48,150,1504,620);drawSurface(ctx,r,{x:110,y:190,w:1380,h:530},displayOptions());ctx.fillStyle='#edf0f8';ctx.font='24px ui-monospace,monospace';ctx.fillText(`${format(r.state.width,0)} × ${format(r.state.height,0)} mm   |   d = ${format(r.state.gap,2)} mm   |   ${O.ledDescription(r.state).label}   |   ${r.leds.length} LEDs`,64,819);ctx.font='19px system-ui,sans-serif';ctx.fillStyle='#a0a9bf';ctx.fillText(`均一さ P5/P95: ${r.stats.robust===null?'—':format(r.stats.robust*100,1)}%   平均輝度: ${format(r.stats.mean,1)} cd/m²   端除外: ${r.state.roi} mm`,64,858);ctx.fillText(`材料 ${r.state.argb} / 厚さ ${r.state.thickness} mm / 透過率 ${r.state.transmission}% / 拡散成分 ${r.state.diffuse}% / σ ${format(r.state.thickness*r.state.spread,2)} mm`,64,892);ctx.fillText(`LED出力 ${r.state.brightness}% / ピッチ ${format(r.pitch,2)} mm / 半値角全幅 ${r.state.angle}° / 表示露出 ${state.exposure} EV`,64,926);ctx.fillStyle='#7b86a1';ctx.font='16px system-ui,sans-serif';const ledInfo=O.ledDescription(r.state);ctx.fillText(`有効幅 ${format(r.state.aperture,3)} mm（${ledInfo.widthBasis}） / 半値角全幅 ${r.state.angle}°（${ledInfo.angleBasis}）`,64,960);ctx.fillText('未校正の比較モデル。開口寸法からの幅は近似、未記載値は仮定。反射・屈折・曲面は非対応。',64,989);ctx.fillText('Diffusion Lab 1.0  |  '+new Date().toISOString(),64,1017);c.toBlob(blob=>{if(blob)download('diffusion-preview-'+stamp()+'.png',blob);else toast('PNG生成に失敗しました。');},'image/png');
@@ -225,6 +273,6 @@ $('selfTestBtn').addEventListener('click',()=>{
 let resizeTimer;new ResizeObserver(()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(renderAll,80);}).observe($('canvasWrap'));
 window.addEventListener('beforeunload',()=>{if(worker)worker.terminate();if(sweepWorker)sweepWorker.terminate();});
 // Read-only diagnostics and an explicit setter are useful for reproducible validation.
-window.DiffusionLab={getState:()=>structuredClone(state),getResult:()=>result,setState:s=>{state=O.normalize({...state,...s});persist();syncControls();clearSweepForChange();requestCompute(0);},isBusy:()=>busy||pending!==null,getSweep:()=>sweepResults,version:'1.0'};
+window.DiffusionLab={getState:()=>structuredClone(state),getResult:()=>result,setState:s=>{resetTapeEditor();state=O.normalize({...state,...s});persist();syncControls();clearSweepForChange();requestCompute(0);},isBusy:()=>busy||pending!==null,getSweep:()=>sweepResults,version:'1.0'};
 syncControls();initWorker();renderAll();requestCompute(0);
 })();
