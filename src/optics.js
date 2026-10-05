@@ -4,12 +4,33 @@
 'use strict';
 const PI=Math.PI, Y=[0.2126,0.7152,0.0722];
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+// 出典の窓寸法と光学的な有効発光面は別物。未記載の値を製品仕様にしない。
+const ledProfiles={
+ 'WS2812B':{packageSize:5.4,windowDiameter:4,angle:null,assumedAperture:2.8,assumedAngle:120,
+  revision:'Worldsemi WS2812B V1.4（2018-07-19）',pages:'p.2 機械寸法',
+  datasheetUrl:'https://docid81hrs3j1.cloudfront.net/medialibrary/2018/10/WS2812B_V1.4_EN_18090714224701.pdf'},
+ 'WS2812B-MINI':{packageSize:3.46,windowDiameter:2.85,angle:null,assumedAperture:1.9,assumedAngle:120,
+  revision:'Worldsemi WS2812B-Mini-V3 V3.0（2019-01-23）',pages:'p.2 機械寸法',
+  datasheetUrl:'https://www.peace-corp.co.jp/data/WS2812B-Mini-V3_V3.0_EN.pdf'},
+ 'WS2812C-2020':{packageSize:2.2,windowDiameter:null,angle:null,assumedAperture:1.1,assumedAngle:120,
+  revision:'Worldsemi WS2812C-2020 V1.2（2019-01-04）',pages:'p.1 機械寸法',
+  datasheetUrl:'https://cdn.sparkfun.com/assets/e/1/0/f/b/WS2812C-2020_V1.2_EN_19112716191654.pdf'},
+ 'SK6812':{packageSize:5.4,windowDiameter:null,angle:120,assumedAperture:2.8,assumedAngle:120,
+  revision:'OPSCO SK6812-012 Rev.B/1（2025-08-11）',pages:'p.3 光学特性 / p.4 機械寸法',
+  datasheetUrl:'https://datasheet.lcsc.com/datasheet/pdf/9f469126feffa69bd23486dc2acd2d83.pdf'},
+ 'SK6812-MINI':{packageSize:3.7,windowDiameter:null,angle:120,assumedAperture:1.9,assumedAngle:120,
+  revision:'OPSCO SK6812MINI-012 Rev.B/0（2024-04-23）',pages:'p.3 光学特性 / p.4 機械寸法',
+  datasheetUrl:'https://datasheet.lcsc.com/datasheet/pdf/9596115a5796613b5408a09f63fb1427.pdf'}
+};
+// 円形の開口を同じ面積の正方形に置換する。ダイ寸法や実測幅の算出ではない。
+function profileAperture(p){return p.windowDiameter===null?p.assumedAperture:p.windowDiameter*Math.sqrt(PI)/2;}
+function profileValues(p){return {packageSize:p.packageSize,aperture:profileAperture(p),angle:p.angle===null?p.assumedAngle:p.angle};}
 const defaults={
  version:1,shape:'rounded',width:160,height:72,radius:10,hole:0.46,
  polygon:'50,2\n88,16\n98,50\n75,94\n25,94\n2,50\n12,16',
  layout:'rows',density:60,rowSpacing:24,inset:8,rotation:0,
  path:'-65,18\n-65,-18\n0,-18\n0,18\n65,18\n65,-18',manual:[],
- package:'5050',packageSize:5,aperture:2.8,splitRGB:false,angle:120,
+ ledModel:'WS2812B',package:'custom',...profileValues(ledProfiles.WS2812B),splitRGB:false,
  mcdR:213,mcdG:715,mcdB:72,brightness:20,
  pattern:'gradient',color1:'#00cfff',color2:'#ff3979',pwmMode:'raw',
  gap:10,material:'opal',argb:'#FFFFFFFF',thickness:3,
@@ -18,11 +39,19 @@ const defaults={
  showLED:false,showGrid:true,view:'appearance',target:80,
  customLabel:'未校正・比較用の仮定値'
 };
-const ENUMS={shape:['rect','rounded','ellipse','ring','polygon'],layout:['rows','grid','perimeter','ring','path','manual'],package:['5050','3535','2020','custom'],pattern:['solid','gradient','alternating','rainbow','rgb'],pwmMode:['raw','srgb'],material:['opal','strong','frost','clear','foam','custom'],tone:['compress','linear'],view:['appearance','heat','layout']};
+const ENUMS={shape:['rect','rounded','ellipse','ring','polygon'],layout:['rows','grid','perimeter','ring','path','manual'],ledModel:[...Object.keys(ledProfiles),'custom'],package:['5050','3535','2020','custom'],pattern:['solid','gradient','alternating','rainbow','rgb'],pwmMode:['raw','srgb'],material:['opal','strong','frost','clear','foam','custom'],tone:['compress','linear'],view:['appearance','heat','layout']};
 const RANGES={width:[10,2000],height:[10,2000],radius:[0,1000],hole:[0.05,0.95],density:[1,1000],rowSpacing:[1,1000],inset:[0,1000],rotation:[-180,180],packageSize:[0.5,20],aperture:[0.05,20],angle:[10,175],mcdR:[0,200000],mcdG:[0,200000],mcdB:[0,200000],brightness:[0,100],gap:[0.25,300],thickness:[0.1,30],transmission:[0,100],diffuse:[0,100],spread:[0,5],roi:[0,500],exposure:[-6,6],whiteLevel:[1,1000000],ambient:[0,10000],target:[0,100]};
 function normalize(input={}) {
  const s={...defaults};
  for(const k in defaults) if(Object.prototype.hasOwnProperty.call(input,k)) s[k]=input[k];
+ // 型番を持たない旧JSONは数値を保持し、外形だけで実在型番に割り当てない。
+ if(!Object.prototype.hasOwnProperty.call(input,'ledModel')&&Object.prototype.hasOwnProperty.call(input,'package')){
+  s.ledModel='custom';
+  const old={'5050':{packageSize:5,aperture:2.8},'3535':{packageSize:3.5,aperture:1.9},'2020':{packageSize:2,aperture:1.1}}[input.package];
+  if(old)for(const k in old)if(!Object.prototype.hasOwnProperty.call(input,k))s[k]=old[k];
+ }else if(!ENUMS.ledModel.includes(s.ledModel))s.ledModel='custom';
+ const profile=ledProfiles[s.ledModel];
+ if(profile)for(const [k,v] of Object.entries(profileValues(profile)))if(!Object.prototype.hasOwnProperty.call(input,k))s[k]=v;
  for(const k in RANGES){const v=Number(s[k]);s[k]=Number.isFinite(v)?clamp(v,...RANGES[k]):defaults[k];}
  for(const k in ENUMS)if(!ENUMS[k].includes(s[k]))s[k]=defaults[k];
  s.quality=[160,288,448].includes(Number(s.quality))?Number(s.quality):288;
@@ -37,6 +66,17 @@ function normalize(input={}) {
  s.radius=Math.min(s.radius,s.width/2,s.height/2);
  s.aperture=Math.min(s.aperture,s.packageSize);
  s.version=1;return s;
+}
+function selectLEDModel(input,id){
+ const p=ledProfiles[id];
+ return normalize({...input,ledModel:p?id:'custom',package:'custom',...(p?profileValues(p):{})});
+}
+function ledDescription(s){
+ const p=ledProfiles[s.ledModel];
+ if(!p)return {label:'カスタム',widthBasis:'手動・旧設定',angleBasis:'手動・旧設定'};
+ const widthBasis=Math.abs(s.aperture-profileAperture(p))>1e-9?'手動上書き':p.windowDiameter===null?'資料未記載・仮定':'開口面積からの近似';
+ const angleBasis=s.angle!==(p.angle===null?p.assumedAngle:p.angle)?'手動上書き':p.angle===null?'資料未記載・仮定':'資料の半値角';
+ return {label:s.ledModel,widthBasis,angleBasis};
 }
 function parsePoints(text,percent=false,s=defaults){
  const out=[];
@@ -194,6 +234,6 @@ function rgba(result,display={}){
   for(let c=0;c<3;c++)out[i*4+c]=clamp(rgb[c]*255,0,255);out[i*4+3]=255;
  }return out;
 }
-const api={defaults,normalize,shapeInfo,outline,parsePoints,makeLEDs,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
+const api={defaults,ledProfiles,profileAperture,selectLEDModel,ledDescription,normalize,shapeInfo,outline,parsePoints,makeLEDs,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
 root.Optics=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof self!=='undefined'?self:globalThis);

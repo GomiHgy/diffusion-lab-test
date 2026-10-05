@@ -51,7 +51,7 @@ python build.py --check
 ```sh
 python build.py
 python -m unittest discover -s tests -p "test_build.py" -v
-node --test tests/test_optics.js
+node --test tests/test_optics.js tests/test_led_profiles.js
 ```
 
 ブラウザテスト用の依存をインストールします。Pythonの仮想環境の使用は任意です。
@@ -69,7 +69,7 @@ python -m playwright install --with-deps chromium
 ```
 
 ブラウザテストは自分でループバックHTTPサーバーを起動し、`/diffusion-lab/` というサブパスから実際にページを読み込みます。
-画面操作37件に加え、ルート配信、読み込み後のオフライン計算、HTTPでの設定永続化、プロジェクトURL、追加の実行時エラーを確認します。
+型番選択・根拠表示・手動上書き・旧設定の互換を含む画面操作と、ルート配信、読み込み後のオフライン計算、HTTPでの設定永続化、プロジェクトURL、実行時エラーを確認します。
 テストの出力、PNG、JSON、CSVは `tests/artifacts/` に保存します。このフォルダーはGit管理対象外です。
 
 Playwrightが取得したブラウザではなく、既存のChromiumを利用する場合は `CHROMIUM_PATH` を指定します。

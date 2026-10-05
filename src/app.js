@@ -7,7 +7,6 @@ let map=null,dragIndex=-1,drawingPath=false,pathDraft=[],lastAutoLEDs=[];
 try{const saved=localStorage.getItem(KEY);if(saved)state=O.normalize(JSON.parse(saved));}catch(_){/* Private/file contexts may deny storage. */}
 const displayKeys=new Set(['view','exposure','tone','ambient','showLED','showGrid','whiteLevel','target','customLabel']);
 const materialPresets={opal:{argb:'#FFFFFFFF',thickness:3,transmission:45,diffuse:100,spread:.65},strong:{argb:'#FFFFFFFF',thickness:3,transmission:30,diffuse:100,spread:1.1},frost:{argb:'#FFFFFFFF',thickness:2,transmission:82,diffuse:90,spread:.2},clear:{argb:'#00FFFFFF',thickness:2,transmission:92,diffuse:0,spread:0},foam:{argb:'#FFFFFEF5',thickness:3,transmission:25,diffuse:100,spread:1.25}};
-const packagePresets={'5050':{packageSize:5,aperture:2.8},'3535':{packageSize:3.5,aperture:1.9},'2020':{packageSize:2,aperture:1.1}};
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(_){}}
 function toast(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,4500);}
 function error(text){$('errorBanner').textContent=text;$('errorBanner').hidden=!text;}
@@ -34,7 +33,7 @@ function toggleExport(){const disabled=!result||busy||pending!==null||!$('errorB
 function designKey(s){const a={...s};for(const k of displayKeys)delete a[k];delete a.gap;delete a.quality;return JSON.stringify(a);}
 function clearSweepForChange(){if(sweepKey&&sweepKey!==designKey(state)){cancelSweep(false);sweepResults=[];sweepKey='';sweepComplete=false;$('sweepBottom').hidden=true;$('comparisonTiles').replaceChildren();const div=document.createElement('div');div.className='empty-comparison';div.textContent='条件が変わりました。「6つの距離を計算」で再比較してください。';$('comparisonTiles').appendChild(div);$('sweepStatus').textContent='過去の比較を破棄しました。距離以外の設定をそろえて再計算します。';}}
 function syncControls(){
- document.querySelectorAll('[data-key]').forEach(el=>{const k=el.dataset.key;if(document.activeElement===el&&(el.tagName==='TEXTAREA'||el.type==='text'||el.type==='number'))return;if(el.type==='checkbox')el.checked=!!state[k];else el.value=state[k];});
+ document.querySelectorAll('[data-key]').forEach(el=>{const k=el.dataset.key;if(document.activeElement===el&&(el.tagName==='TEXTAREA'||el.type==='text'||el.type==='number'))return;if(el.type==='checkbox')el.checked=!!state[k];else el.value=k==='aperture'?Number(state[k].toFixed(3)):state[k];});
  document.querySelectorAll('[data-out]').forEach(el=>{const k=el.dataset.out;el.textContent=String(state[k])+(el.dataset.suffix||'');});
  document.querySelectorAll('[data-show],[data-hide]').forEach(el=>{const rule=el.dataset.show||el.dataset.hide,[k,list]=rule.split(':'),matches=list.split(',').includes(String(state[k]));el.hidden=el.hasAttribute('data-show')?!matches:matches;});
  document.querySelectorAll('[data-view]').forEach(btn=>{const active=btn.dataset.view===state.view;btn.classList.toggle('active',active);btn.setAttribute('aria-selected',String(active));});
@@ -43,10 +42,27 @@ function syncControls(){
  $('materialPicker').value='#'+state.argb.slice(3);
  $('heatKey').style.display=state.view==='heat'?'block':'none';
  $('canvasLabel').textContent=state.view==='layout'?'LED LAYOUT · X → / Y ↓':state.view==='heat'?'LUMINANCE MAP · IMAGE P95 SCALE':'FRONT VIEW · PARALLEL PLANES';
+ syncLEDSpec();
+}
+function syncLEDSpec(){
+ const p=O.ledProfiles[state.ledModel],description=O.ledDescription(state);
+ const size=document.querySelector('[data-key="packageSize"]');size.readOnly=!!p;
+ $('ledPresetBtn').hidden=!p;
+ $('ledValueSummary').textContent=`幅：${description.widthBasis} / 角度：${description.angleBasis}`;
+ $('ledSpecDetails').replaceChildren();
+ if(!p){$('ledSpecDetails').textContent='型番未指定の手入力です。旧設定ファイルは元の幅・角度・光度を保持して読み込みます。製品に対応づける場合は型番を選び直してください。';return;}
+ const lines=[p.revision+' · '+p.pages,
+  p.windowDiameter===null?`発光窓・有効発光面の寸法は未記載。型番選択時の初期値は比較用の仮定 ${p.assumedAperture} mm です。`:`型番選択時の初期値は、機械図の開口 ${p.windowDiameter} mm を円形とみなし、同じ面積の正方形幅 d × √π / 2 = ${format(O.profileAperture(p),3)} mm に近似した値です。実際のダイ幅や光学的な有効発光幅ではありません。`,
+  `現在の計算幅：${format(state.aperture,3)} mm（${description.widthBasis}）。`,
+  p.angle===null?`半値角の規格は未記載。型番選択時の初期値は比較用の全幅 ${p.assumedAngle}° です。外形・開口寸法から発光角度は算出できません。`:`型番選択時の初期値は、資料の50%光度における全幅 ${p.angle}° です。cosⁿ配光に近似します。`,
+  `現在の計算角度：全幅 ${state.angle}°（${description.angleBasis}）。`,
+  `資料の外形最大辺は ${p.packageSize} mm。配置は現在の代表幅 ${state.packageSize} mm の正方形に近似します。光度は型番選択では変わりません。実際の製品に合わせて各色を入力してください。`];
+ for(const text of lines){const paragraph=document.createElement('p');paragraph.textContent=text;$('ledSpecDetails').appendChild(paragraph);}
+ const link=document.createElement('a');link.href=p.datasheetUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='参照データシートを開く';$('ledSpecDetails').appendChild(link);
 }
 function applyChange(key,value){
  const previous=state.layout;
- if(key==='package'&&packagePresets[value])Object.assign(state,packagePresets[value]);
+ if(key==='ledModel')state=O.selectLEDModel(state,value);
  if(key==='material'&&materialPresets[value])Object.assign(state,materialPresets[value]);
  state[key]=value;
  if(['argb','thickness','transmission','diffuse','spread'].includes(key))state.material='custom';
@@ -59,8 +75,9 @@ function applyChange(key,value){
  if(displayKeys.has(key)){renderAll();return;}
  clearSweepForChange();drawSection();if(state.view==='layout')drawMain();requestCompute(key==='polygon'||key==='path'?550:140);
 }
+$('ledPresetBtn').addEventListener('click',()=>applyChange('ledModel',state.ledModel));
 for(const el of document.querySelectorAll('[data-key]')){
- if(el.type==='number')el.addEventListener('blur',()=>{el.value=state[el.dataset.key];});
+ if(el.type==='number')el.addEventListener('blur',()=>{el.value=el.dataset.key==='aperture'?Number(state.aperture.toFixed(3)):state[el.dataset.key];});
  el.addEventListener('input',()=>{
   let k=el.dataset.key,v=el.type==='checkbox'?el.checked:el.value;
   if(['number','range'].includes(el.type)){if(el.value===''||!Number.isFinite(+v))return;v=+v;}
@@ -79,7 +96,7 @@ $('scenePreset').addEventListener('change',e=>{
  const scene=e.target.value;if(!scene)return;let s=O.normalize();
  if(scene==='strip')Object.assign(s,{width:140,height:22,radius:3,layout:'rows',rowSpacing:100,density:60,pattern:'solid',color1:'#ffffff',gap:2.5,roi:2});
  if(scene==='panel')Object.assign(s,{width:144,height:96,layout:'grid',density:60,pattern:'solid',color1:'#ffffff',gap:15});
- if(scene==='ring')Object.assign(s,{width:100,height:100,shape:'ring',hole:.5,layout:'ring',inset:12,density:150,package:'2020',...packagePresets['2020'],pattern:'rainbow',gap:8,roi:2});
+ if(scene==='ring'){s=O.selectLEDModel(s,'WS2812C-2020');Object.assign(s,{width:100,height:100,shape:'ring',hole:.5,layout:'ring',inset:12,density:150,pattern:'rainbow',gap:8,roi:2});}
  if(scene==='foam')Object.assign(s,{width:140,height:28,layout:'rows',rowSpacing:100,density:144,pattern:'solid',color1:'#ffffff',gap:5,roi:2,material:'foam',...materialPresets.foam});
  if(scene==='rgb')Object.assign(s,{width:40,height:24,layout:'rows',rowSpacing:100,density:150,pattern:'solid',color1:'#ffffff',gap:1,splitRGB:true,material:'custom',transmission:75,diffuse:100,spread:0,roi:1,quality:448,exposure:-3});
  state=O.normalize(s);drawingPath=false;pathDraft=[];persist();syncControls();clearSweepForChange();requestCompute(0);e.target.value='';
@@ -183,12 +200,12 @@ $('pathFinishBtn').addEventListener('click',finishPath);
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){if(drawingPath){drawingPath=false;pathDraft=[];drawMain();toast('経路の描画を取り消しました。');}closeModal();}if(e.key==='Enter'&&drawingPath&&document.activeElement.tagName!=='TEXTAREA')finishPath();});
 function download(name,blob){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);}
 const stamp=()=>new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
-$('saveBtn').addEventListener('click',()=>{download('diffusion-settings-'+stamp()+'.json',new Blob([JSON.stringify({app:'Diffusion Lab',schemaVersion:1,savedAt:new Date().toISOString(),state},null,2)],{type:'application/json'}));toast('設定JSONを保存しました。');});
+$('saveBtn').addEventListener('click',()=>{download('diffusion-settings-'+stamp()+'.json',new Blob([JSON.stringify({app:'Diffusion Lab',schemaVersion:2,savedAt:new Date().toISOString(),state},null,2)],{type:'application/json'}));toast('設定JSONを保存しました。');});
 $('loadBtn').addEventListener('click',()=>$('fileInput').click());
-$('fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>2*1024*1024)throw Error('設定ファイルは2 MB以下にしてください。');const data=JSON.parse(await f.text());if(data.schemaVersion&&data.schemaVersion!==1)throw Error('この設定ファイルの版には対応していません。');const s=data.state||data;if(!s||typeof s!=='object'||Array.isArray(s)||!('width' in s)||!('gap' in s))throw Error('Diffusion Labの設定JSONではありません。');const loaded=O.normalize(s);O.makeLEDs(loaded);state=loaded;persist();syncControls();clearSweepForChange();requestCompute(0);toast('設定を読み込みました。');}catch(error){toast('読み込みできません: '+error.message);}finally{e.target.value='';}});
+$('fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>2*1024*1024)throw Error('設定ファイルは2 MB以下にしてください。');const data=JSON.parse(await f.text());if(data.schemaVersion&&![1,2].includes(data.schemaVersion))throw Error('この設定ファイルの版には対応していません。');const s=data.state||data;if(!s||typeof s!=='object'||Array.isArray(s)||!('width' in s)||!('gap' in s))throw Error('Diffusion Labの設定JSONではありません。');const loaded=O.normalize(s);O.makeLEDs(loaded);state=loaded;persist();syncControls();clearSweepForChange();requestCompute(0);toast('設定を読み込みました。');}catch(error){toast('読み込みできません: '+error.message);}finally{e.target.value='';}});
 $('csvBtn').addEventListener('click',()=>{if(!result)return;const r=result,lines=['x_mm,y_mm,in_evaluation_region,R_cd_m2,G_cd_m2,B_cd_m2,total_cd_m2,incident_total_lux'];for(let y=0;y<r.ny;y++)for(let x=0;x<r.nx;x++){const i=y*r.nx+x;if(!r.mask[i])continue;const v=r.fields.map(f=>f[i]);lines.push([(x+.5)*r.dx-r.state.width/2,(y+.5)*r.dy-r.state.height/2,r.roiMask[i],...v,v[0]+v[1]+v[2],r.irradiance.reduce((sum,f)=>sum+f[i],0)].map(n=>typeof n==='number'?Number(n.toPrecision(8)):n).join(','));}download('diffusion-grid-'+stamp()+'.csv',new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));toast('線形データをCSVで保存しました。');});
 $('pngBtn').addEventListener('click',()=>{
- if(!result)return;const r=result,c=document.createElement('canvas');c.width=1600;c.height=1060;const ctx=c.getContext('2d');ctx.fillStyle='#10131a';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#eef0f8';ctx.font='bold 34px system-ui,sans-serif';ctx.fillText('Diffusion Lab — LED 面発光シミュレーション',64,76);ctx.fillStyle='#a0a9bf';ctx.font='18px system-ui,sans-serif';ctx.fillText('正面・平行平面の近似 / 未校正 / 同一露出で比較',64,113);ctx.fillStyle='#0b0e14';ctx.fillRect(48,150,1504,620);drawSurface(ctx,r,{x:110,y:190,w:1380,h:530},displayOptions());ctx.fillStyle='#edf0f8';ctx.font='24px ui-monospace,monospace';ctx.fillText(`${format(r.state.width,0)} × ${format(r.state.height,0)} mm   |   d = ${format(r.state.gap,2)} mm   |   ${r.state.package}   |   ${r.leds.length} LEDs`,64,819);ctx.font='19px system-ui,sans-serif';ctx.fillStyle='#a0a9bf';ctx.fillText(`均一さ P5/P95: ${r.stats.robust===null?'—':format(r.stats.robust*100,1)}%   平均輝度: ${format(r.stats.mean,1)} cd/m²   端除外: ${r.state.roi} mm`,64,858);ctx.fillText(`材料 ${r.state.argb} / 厚さ ${r.state.thickness} mm / 透過率 ${r.state.transmission}% / 拡散成分 ${r.state.diffuse}% / σ ${format(r.state.thickness*r.state.spread,2)} mm`,64,892);ctx.fillText(`LED出力 ${r.state.brightness}% / ピッチ ${format(r.pitch,2)} mm / 半値角全幅 ${r.state.angle}° / 表示露出 ${state.exposure} EV`,64,926);ctx.fillStyle='#7b86a1';ctx.font='16px system-ui,sans-serif';ctx.fillText('仮定値を含む比較モデル。実製品の光度・配光・透過・散乱特性を校正していません。反射・屈折・曲面は非対応。',64,983);ctx.fillText('Diffusion Lab 1.0  |  '+new Date().toISOString(),64,1017);c.toBlob(blob=>{if(blob)download('diffusion-preview-'+stamp()+'.png',blob);else toast('PNG生成に失敗しました。');},'image/png');
+ if(!result)return;const r=result,c=document.createElement('canvas');c.width=1600;c.height=1060;const ctx=c.getContext('2d');ctx.fillStyle='#10131a';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#eef0f8';ctx.font='bold 34px system-ui,sans-serif';ctx.fillText('Diffusion Lab — LED 面発光シミュレーション',64,76);ctx.fillStyle='#a0a9bf';ctx.font='18px system-ui,sans-serif';ctx.fillText('正面・平行平面の近似 / 未校正 / 同一露出で比較',64,113);ctx.fillStyle='#0b0e14';ctx.fillRect(48,150,1504,620);drawSurface(ctx,r,{x:110,y:190,w:1380,h:530},displayOptions());ctx.fillStyle='#edf0f8';ctx.font='24px ui-monospace,monospace';ctx.fillText(`${format(r.state.width,0)} × ${format(r.state.height,0)} mm   |   d = ${format(r.state.gap,2)} mm   |   ${O.ledDescription(r.state).label}   |   ${r.leds.length} LEDs`,64,819);ctx.font='19px system-ui,sans-serif';ctx.fillStyle='#a0a9bf';ctx.fillText(`均一さ P5/P95: ${r.stats.robust===null?'—':format(r.stats.robust*100,1)}%   平均輝度: ${format(r.stats.mean,1)} cd/m²   端除外: ${r.state.roi} mm`,64,858);ctx.fillText(`材料 ${r.state.argb} / 厚さ ${r.state.thickness} mm / 透過率 ${r.state.transmission}% / 拡散成分 ${r.state.diffuse}% / σ ${format(r.state.thickness*r.state.spread,2)} mm`,64,892);ctx.fillText(`LED出力 ${r.state.brightness}% / ピッチ ${format(r.pitch,2)} mm / 半値角全幅 ${r.state.angle}° / 表示露出 ${state.exposure} EV`,64,926);ctx.fillStyle='#7b86a1';ctx.font='16px system-ui,sans-serif';const ledInfo=O.ledDescription(r.state);ctx.fillText(`有効幅 ${format(r.state.aperture,3)} mm（${ledInfo.widthBasis}） / 半値角全幅 ${r.state.angle}°（${ledInfo.angleBasis}）`,64,960);ctx.fillText('未校正の比較モデル。開口寸法からの幅は近似、未記載値は仮定。反射・屈折・曲面は非対応。',64,989);ctx.fillText('Diffusion Lab 1.0  |  '+new Date().toISOString(),64,1017);c.toBlob(blob=>{if(blob)download('diffusion-preview-'+stamp()+'.png',blob);else toast('PNG生成に失敗しました。');},'image/png');
 });
 let modalReturn=null;
 function showModal(){modalReturn=document.activeElement;$('modelModal').hidden=false;$('closeModal').focus();}

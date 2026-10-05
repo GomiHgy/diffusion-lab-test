@@ -51,7 +51,7 @@ jobs:
         run: python -m unittest discover -s tests -p "test_build.py" -v
 
       - name: Test optical calculations
-        run: node --test tests/test_optics.js
+        run: node --test tests/test_optics.js tests/test_led_profiles.js
 
       - name: Install browser test dependencies
         run: |
