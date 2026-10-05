@@ -2,6 +2,7 @@
  * No third-party runtime dependencies. See MODEL.md for assumptions. */
 (function (root) {
 'use strict';
+const Gaming=root.Gaming||(typeof require==='function'?require('./gaming.js'):null);
 const PI=Math.PI, Y=[0.2126,0.7152,0.0722];
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // 出典の窓寸法と光学的な有効発光面は別物。未記載の値を製品仕様にしない。
@@ -28,19 +29,22 @@ function profileValues(p){return {packageSize:p.packageSize,aperture:profileAper
 const defaults={
  version:1,shape:'rounded',width:160,height:72,radius:10,hole:0.46,
  polygon:'50,2\n88,16\n98,50\n75,94\n25,94\n2,50\n12,16',
- layout:'rows',density:60,rowSpacing:24,inset:8,rotation:0,
+ svgShapes:[],svgLabel:'',
+ layout:'rows',density:60,rowSpacing:24,inset:8,rotation:0,tapeCount:0,
  path:'-65,18\n-65,-18\n0,-18\n0,18\n65,18\n65,-18',manual:[],tapeLengths:[],
  ledModel:'WS2812B',package:'custom',...profileValues(ledProfiles.WS2812B),splitRGB:false,
  mcdR:213,mcdG:715,mcdB:72,brightness:20,
+ gamingScene:'rainbowWave',gamingSpeed:1,gamingPhase:0,gamingPlaying:false,
  pattern:'gradient',color1:'#00cfff',color2:'#ff3979',pwmMode:'raw',
  gap:10,material:'opal',argb:'#FFFFFFFF',thickness:3,
  transmission:45,diffuse:100,spread:0.65,
  quality:288,roi:5,exposure:0,whiteLevel:1000,tone:'compress',ambient:0,
  showLED:false,showGrid:true,view:'appearance',target:80,
+ renderMode:'2d',cameraYaw:-25,cameraPitch:55,cameraZoom:1,
  customLabel:'未校正・比較用の仮定値'
 };
-const ENUMS={shape:['rect','rounded','ellipse','ring','polygon'],layout:['rows','grid','perimeter','ring','path','manual'],ledModel:[...Object.keys(ledProfiles),'custom'],package:['5050','3535','2020','custom'],pattern:['solid','gradient','alternating','rainbow','rgb'],pwmMode:['raw','srgb'],material:['opal','strong','frost','clear','foam','custom'],tone:['compress','linear'],view:['appearance','heat','layout']};
-const RANGES={width:[10,2000],height:[10,2000],radius:[0,1000],hole:[0.05,0.95],density:[1,1000],rowSpacing:[1,1000],inset:[0,1000],rotation:[-180,180],packageSize:[0.5,20],aperture:[0.05,20],angle:[10,175],mcdR:[0,200000],mcdG:[0,200000],mcdB:[0,200000],brightness:[0,100],gap:[0.25,300],thickness:[0.1,30],transmission:[0,100],diffuse:[0,100],spread:[0,5],roi:[0,500],exposure:[-6,6],whiteLevel:[1,1000000],ambient:[0,10000],target:[0,100]};
+const ENUMS={shape:['rect','rounded','ellipse','ring','polygon','svg'],layout:['rows','grid','perimeter','ring','path','manual'],ledModel:[...Object.keys(ledProfiles),'custom'],package:['5050','3535','2020','custom'],pattern:['solid','gradient','alternating','rainbow','rgb','gaming'],gamingScene:['rainbowWave','chase','breathe','cyberPulse'],renderMode:['2d','3d'],pwmMode:['raw','srgb'],material:['opal','strong','frost','clear','foam','custom'],tone:['compress','linear'],view:['appearance','heat','layout']};
+const RANGES={tapeCount:[0,100],gamingSpeed:[.1,3],gamingPhase:[0,1],cameraYaw:[-180,180],cameraPitch:[8,82],cameraZoom:[.5,2.5],width:[10,2000],height:[10,2000],radius:[0,1000],hole:[0.05,0.95],density:[1,1000],rowSpacing:[1,1000],inset:[0,1000],rotation:[-180,180],packageSize:[0.5,20],aperture:[0.05,20],angle:[10,175],mcdR:[0,200000],mcdG:[0,200000],mcdB:[0,200000],brightness:[0,100],gap:[0.25,300],thickness:[0.1,30],transmission:[0,100],diffuse:[0,100],spread:[0,5],roi:[0,500],exposure:[-6,6],whiteLevel:[1,1000000],ambient:[0,10000],target:[0,100]};
 function normalize(input={}) {
  const s={...defaults};
  for(const k in defaults) if(Object.prototype.hasOwnProperty.call(input,k)) s[k]=input[k];
@@ -54,13 +58,15 @@ function normalize(input={}) {
  if(profile)for(const [k,v] of Object.entries(profileValues(profile)))if(!Object.prototype.hasOwnProperty.call(input,k))s[k]=v;
  for(const k in RANGES){const v=Number(s[k]);s[k]=Number.isFinite(v)?clamp(v,...RANGES[k]):defaults[k];}
  for(const k in ENUMS)if(!ENUMS[k].includes(s[k]))s[k]=defaults[k];
+ s.tapeCount=Math.round(s.tapeCount);
  s.quality=[160,288,448].includes(Number(s.quality))?Number(s.quality):288;
- for(const k of ['splitRGB','showLED','showGrid'])s[k]=s[k]===true;
+ for(const k of ['splitRGB','showLED','showGrid','gamingPlaying'])s[k]=s[k]===true;
  for(const k of ['color1','color2'])if(typeof s[k]!=='string'||!/^#[0-9a-f]{6}$/i.test(s[k]))s[k]=defaults[k];
  if(typeof s.argb!=='string'||!/^#[0-9a-f]{8}$/i.test(s.argb))s.argb=defaults.argb;
  s.argb=s.argb.toUpperCase();
  s.polygon=typeof s.polygon==='string'?s.polygon.slice(0,30000):defaults.polygon;
  s.path=typeof s.path==='string'?s.path.slice(0,30000):defaults.path;
+ s.svgShapes=normalizeSVGShapes(s.svgShapes);s.svgLabel=typeof s.svgLabel==='string'?s.svgLabel.slice(0,200):'';
  s.customLabel=typeof s.customLabel==='string'?s.customLabel.slice(0,200):defaults.customLabel;
  // テープの接続順を保存する。輪郭変更で各LEDを個別に丸めて間隔を変えない。
  const raw=Array.isArray(s.manual)?s.manual:[],lengths=validTapeLengths(raw.length,s.tapeLengths),manual=[],counts=[];
@@ -97,7 +103,63 @@ function parsePoints(text,percent=false,s=defaults){
 }
 function pointInPoly(x,y,p){let v=false;for(let i=0,j=p.length-1;i<p.length;j=i++)if(((p[i][1]>y)!==(p[j][1]>y))&&x<(p[j][0]-p[i][0])*(y-p[i][1])/(p[j][1]-p[i][1])+p[i][0])v=!v;return v;}
 function segDist(x,y,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],t=clamp(((x-a[0])*dx+(y-a[1])*dy)/(dx*dx+dy*dy||1),0,1);return Math.hypot(x-a[0]-t*dx,y-a[1]-t*dy);}
+function normalizeSVGShapes(shapes){
+ if(!Array.isArray(shapes)||shapes.length>100)throw Error('SVG輪郭のデータが不正です。');let n=0;
+ return shapes.map(shape=>{if(!shape||!['nonzero','evenodd'].includes(shape.fillRule)||!Array.isArray(shape.contours)||!shape.contours.length)throw Error('SVG輪郭の塗り規則・輪郭データが不正です。');
+  return {fillRule:shape.fillRule,contours:shape.contours.map(contour=>{if(!Array.isArray(contour)||contour.length<3||(n+=contour.length)>2048)throw Error('SVG輪郭は3〜2,048頂点の範囲にしてください。');
+   return contour.map(p=>{if(!Array.isArray(p)||p.length!==2||!p.every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=100))throw Error('SVG輪郭の座標は0〜100%の数値で指定してください。');return p.slice();});})};});
+}
+let svgGeometryCache=null;
+function svgGeometry(s){
+ const key=JSON.stringify([s.width,s.height,s.svgShapes]);if(svgGeometryCache&&svgGeometryCache.key===key)return svgGeometryCache.value;
+ if(!s.svgShapes.length)throw Error('SVGファイルまたはパスを読み込み、輪郭に適用してください。');
+ const shapes=s.svgShapes.map(shape=>({fillRule:shape.fillRule,contours:shape.contours.map(contour=>contour.map(p=>[(p[0]/100-.5)*s.width,(p[1]/100-.5)*s.height]))}));
+ const contours=shapes.flatMap(shape=>shape.contours),edges=contours.flatMap(p=>p.map((a,i)=>[a,p[(i+1)%p.length]]));
+ function filled(x,y){
+  for(const shape of shapes){let winding=0;for(const contour of shape.contours)for(let i=0;i<contour.length;i++){
+   const a=contour[i],b=contour[(i+1)%contour.length],cross=(b[0]-a[0])*(y-a[1])-(x-a[0])*(b[1]-a[1]);
+   if(a[1]<=y&&b[1]>y&&cross>0)winding++;else if(a[1]>y&&b[1]<=y&&cross<0)winding--;
+  }if(shape.fillRule==='evenodd'?Math.abs(winding)%2!==0:winding!==0)return true;}
+  return false;
+ }
+ // 交点で辺を分割し、塗り領域の両側が異なる辺だけを境界にする。
+ // 重複したパスやnonzeroの内側の線を、ROIの端として扱わない。
+ const cuts=edges.map(()=>[0,1]),cross=(a,b)=>a[0]*b[1]-a[1]*b[0],eps=1e-10;
+ for(let i=0;i<edges.length;i++)for(let j=i+1;j<edges.length;j++){
+  const [a,b]=edges[i],[c,d]=edges[j],r=[b[0]-a[0],b[1]-a[1]],q=[d[0]-c[0],d[1]-c[1]],v=[c[0]-a[0],c[1]-a[1]],den=cross(r,q);
+  if(Math.abs(den)>eps){const t=cross(v,q)/den,u=cross(v,r)/den;if(t>=0&&t<=1&&u>=0&&u<=1){cuts[i].push(t);cuts[j].push(u);}}
+  else if(Math.abs(cross(v,r))<eps){for(const [k,p,q,other] of [[i,a,b,[c,d]],[j,c,d,[a,b]]]){const dx=q[0]-p[0],dy=q[1]-p[1],l=dx*dx+dy*dy;if(!l)continue;for(const o of other){const t=((o[0]-p[0])*dx+(o[1]-p[1])*dy)/l;if(t>0&&t<1)cuts[k].push(t);}}}
+ }
+ const boundary=[],probe=Math.max(s.width,s.height)*1e-7,seen=new Set(),vertexKey=p=>p.map(v=>Math.round(v/probe*100)).join(',');
+ edges.forEach(([a,b],i)=>{const ts=cuts[i].sort((a,b)=>a-b),dx=b[0]-a[0],dy=b[1]-a[1],length=Math.hypot(dx,dy);if(!length)return;
+  for(let j=1;j<ts.length;j++){if(ts[j]-ts[j-1]<1e-9)continue;const t=(ts[j]+ts[j-1])/2,x=a[0]+dx*t,y=a[1]+dy*t,nx=-dy/length*probe,ny=dx/length*probe;
+   const left=filled(x+nx,y+ny),right=filled(x-nx,y-ny);
+   if(left!==right){let p=[a[0]+dx*ts[j-1],a[1]+dy*ts[j-1]],q=[a[0]+dx*ts[j],a[1]+dy*ts[j]];if(!left)[p,q]=[q,p];const key=vertexKey(p)+'/'+vertexKey(q);if(!seen.has(key)){seen.add(key);boundary.push([p,q]);}}
+   if(boundary.length>4096)throw Error('SVGの交差が多すぎます。パスを簡略化してください。');
+  }
+ });
+ if(!boundary.length)throw Error('SVGに面積のある塗り領域がありません。塗り規則を確認してください。');
+ const outgoing=new Map();boundary.forEach(([a],i)=>{const key=vertexKey(a);if(!outgoing.has(key))outgoing.set(key,[]);outgoing.get(key).push(i);});
+ const used=new Set(),loops=[];
+ for(let first=0;first<boundary.length;first++){if(used.has(first))continue;const loop=[],startKey=vertexKey(boundary[first][0]);let index=first;
+  while(!used.has(index)){const [a,b]=boundary[index];used.add(index);loop.push(a);const endKey=vertexKey(b);if(endKey===startKey)break;
+   const candidates=(outgoing.get(endKey)||[]).filter(i=>!used.has(i));if(!candidates.length)throw Error('SVGの境界を接続できません。細かすぎる交差を簡略化してください。');
+   const dx=b[0]-a[0],dy=b[1]-a[1],angle=i=>{const q=boundary[i][1],turn=Math.atan2(dx*(q[1]-b[1])-dy*(q[0]-b[0]),dx*(q[0]-b[0])+dy*(q[1]-b[1]));return turn<-1e-10?turn+2*PI:turn;};
+   candidates.sort((a,b)=>angle(a)-angle(b));index=candidates[0];
+  }if(loop.length>=3)loops.push(loop);
+ }
+ const value={shapes,contours,boundary,loops,filled};svgGeometryCache={key,value};return value;
+}
 function shapeInfo(s){
+ if(s.shape==='svg'){
+  const geometry=svgGeometry(s);
+  return {...geometry,poly:geometry.contours[0],inside:(x,y,margin=0)=>{
+   if(Math.abs(x)>s.width/2||Math.abs(y)>s.height/2)return false;
+   const inside=geometry.filled(x,y);if(!inside&&margin>0)return false;
+   for(const [a,b] of geometry.boundary){const d=segDist(x,y,a,b);if(margin>0&&d<margin)return false;if(margin===0&&d<1e-8)return true;}
+   return inside;
+  }};
+ }
  let poly=[];if(s.shape==='polygon'){poly=parsePoints(s.polygon,true,s);if(poly.length<3)throw Error('輪郭には3点以上が必要です。');let area=0;poly.forEach((p,i)=>{let q=poly[(i+1)%poly.length];area+=p[0]*q[1]-q[0]*p[1];});if(Math.abs(area)<.01)throw Error('輪郭の面積がありません。');}
  const a=s.width/2,b=s.height/2;
  function inside(x,y,margin=0){
@@ -118,7 +180,7 @@ function shapeInfo(s){
  return {inside,poly};
 }
 function outline(s,n=120){
- const p=[];if(s.shape==='polygon')return parsePoints(s.polygon,true,s);
+ const p=[];if(s.shape==='svg')return svgGeometry(s).contours[0];if(s.shape==='polygon')return parsePoints(s.polygon,true,s);
  if(s.shape==='ellipse'||s.shape==='ring'){for(let i=0;i<n;i++){let a=2*PI*i/n;p.push([s.width/2*Math.cos(a),s.height/2*Math.sin(a)]);}return p;}
  if(s.shape==='rect')return [[-s.width/2,-s.height/2],[s.width/2,-s.height/2],[s.width/2,s.height/2],[-s.width/2,s.height/2]];
  const r=s.radius;for(let c=0;c<4;c++){let cx=(c===0||c===3?1:-1)*(s.width/2-r),cy=(c<2?1:-1)*(s.height/2-r);for(let k=0;k<=12;k++){let t=c*PI/2+k/12*PI/2;p.push([cx+r*Math.cos(t),cy+r*Math.sin(t)]);}}return p;
@@ -127,7 +189,7 @@ function color(hex){return [1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255);}
 function srgbToLinear(v){return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}
 function linearToSrgb(v){v=Math.max(0,v);return v<=.0031308?12.92*v:1.055*v**(1/2.4)-.055;}
 function hsv(h){h=((h%1)+1)%1;const i=Math.floor(h*6),f=h*6-i;return [[1,f,0],[1-f,1,0],[0,1,f],[0,1-f,1],[f,0,1],[1,0,1-f]][i%6];}
-function ledColors(s,n){const a=color(s.color1),b=color(s.color2),out=[];for(let i=0;i<n;i++){let t=n>1?i/(n-1):0,c;
+function ledColors(s,n){if(s.pattern==='gaming'){if(!Gaming)throw Error('点灯演出を読み込めませんでした。');return Gaming.colors(s,n);}const a=color(s.color1),b=color(s.color2),out=[];for(let i=0;i<n;i++){let t=n>1?i/(n-1):0,c;
  if(s.pattern==='gradient')c=a.map((v,k)=>v*(1-t)+b[k]*t);
  else if(s.pattern==='alternating')c=i%2?b:a;
  else if(s.pattern==='rainbow')c=hsv(t*.85);
@@ -172,12 +234,15 @@ function makeLEDs(s){
  else if(s.layout==='ring'){
   const a=s.width/2-margin,b=s.height/2-margin;if(a>0&&b>0){let p=[];for(let i=0;i<720;i++){let t=2*PI*i/720;p.push([a*Math.cos(t),b*Math.sin(t)]);}list=samplePath(p,pitch,true);}
  }else if(s.layout==='perimeter'){
-  const w=s.width-2*margin,h=s.height-2*margin;if(w>0&&h>0)list=samplePath(outline({...s,width:w,height:h,radius:Math.max(0,s.radius-margin)}),pitch,true);
+  const w=s.width-2*margin,h=s.height-2*margin;if(w>0&&h>0){const smaller={...s,width:w,height:h,radius:Math.max(0,s.radius-margin)};
+   if(s.shape==='svg')svgGeometry(smaller).loops.forEach((contour,index)=>list.push(...samplePath(contour,pitch,true).map(p=>[...p,index])));
+   else list=samplePath(outline(smaller),pitch,true);
+  }
  }else{
   const spacing=s.layout==='grid'?pitch:s.rowSpacing;
   const extent=Math.hypot(s.width,s.height)/2;
   if(Math.ceil(2*extent/pitch)*Math.ceil(2*extent/spacing)>90000)throw Error('配置候補が多すぎます。LED密度を下げてください。');
-  const ny=Math.max(1,Math.floor((s.height-2*margin)/spacing)+1),nx=Math.max(1,Math.floor((s.width-2*margin)/pitch)+1);
+  const ny=s.layout==='rows'&&s.tapeCount?s.tapeCount:Math.max(1,Math.floor((s.height-2*margin)/spacing)+1),nx=Math.max(1,Math.floor((s.width-2*margin)/pitch)+1);
   if(nx*ny>15000)throw Error('LED数が多すぎます。密度または列間隔を調整してください。');
   for(let j=0;j<ny;j++){const row=[];for(let i=0;i<nx;i++){let x=(i-(nx-1)/2)*pitch,y=(j-(ny-1)/2)*spacing;row.push([x*Math.cos(rot)-y*Math.sin(rot),x*Math.sin(rot)+y*Math.cos(rot),rot,s.layout==='rows'?j:0]);}if(j%2)row.reverse();list.push(...row);}
  }
@@ -185,6 +250,7 @@ function makeLEDs(s){
  if(list.length>5000)throw Error('LED数が5,000個を超えます。密度を下げてください。');
  const cols=ledColors(s,list.length),groups=new Map(),tapeLengths=[];
  const leds=list.map((p,i)=>{const id=p[3]||0;if(!groups.has(id)){groups.set(id,groups.size);tapeLengths.push(0);}const tapeIndex=groups.get(id);tapeLengths[tapeIndex]++;return {x:p[0],y:p[1],angle:p[2]||0,rgb:cols[i],index:i,tapeIndex};});
+ if(s.layout==='rows'&&s.tapeCount&&tapeLengths.length!==s.tapeCount)throw Error('指定本数のテープが輪郭内に収まりません。板の寸法・列間隔を調整してください。');
  return {leds,tapeLengths,discarded:raw-list.length,pitch};
 }
 const planCache=new Map();
@@ -265,6 +331,6 @@ function rgba(result,display={}){
   for(let c=0;c<3;c++)out[i*4+c]=clamp(rgb[c]*255,0,255);out[i*4+3]=255;
  }return out;
 }
-const api={defaults,ledProfiles,profileAperture,selectLEDModel,ledDescription,normalize,shapeInfo,outline,parsePoints,makeLEDs,tapeLayout,tapeRanges,moveTape,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
+const api={defaults,ledProfiles,profileAperture,selectLEDModel,ledDescription,normalize,shapeInfo,svgGeometry,outline,parsePoints,makeLEDs,tapeLayout,tapeRanges,moveTape,ledColors,samplePath,color,hsv,Y,srgbToLinear,linearToSrgb,getFilter,fft2,makeKernel,kernelValue,rasterSources,gaussianBlur,statistics,Solver,rgba,clamp};
 root.Optics=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof self!=='undefined'?self:globalThis);

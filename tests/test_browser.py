@@ -101,6 +101,70 @@ with sync_playwright() as p:
     for shape in ['rect','rounded','ellipse','ring','polygon']:
         set_state(page,{'shape':shape,'layout':'rows'})
         check('Shape: '+shape,page.evaluate('Number.isFinite(DiffusionLab.getResult().stats.mean) && document.getElementById("errorBanner").hidden'))
+    # SVG paths are imported as one union, including transforms, holes and disconnected regions.
+    page.locator('[data-key="shape"]').select_option('svg')
+    page.wait_for_function('!DiffusionLab.isBusy()')
+    svg='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 500">
+      <g transform="translate(100 40) scale(2)">
+       <path id="穴付き" fill-rule="evenodd" d="M0 0H40V40H0Z M10 10H30V30H10Z"/>
+       <path id="重なる部分" d="M35 0H60V40H35Z"/>
+       <path id="離れた部分" d="M80 0H90V40H80Z"/>
+      </g></svg>'''
+    page.locator('#svgFileInput').set_input_files({'name':'outline.svg','mimeType':'image/svg+xml','buffer':svg.encode()})
+    page.wait_for_function('document.getElementById("svgImportStatus").textContent.includes("3パスを読み込み")')
+    check('SVG file reading identifies all paths before applying',page.evaluate('DiffusionLab.getState().svgShapes.length===0') and page.locator('#svgSource').input_value()==svg)
+    page.locator('#svgApplyBtn').click();page.wait_for_function('DiffusionLab.getState().svgShapes.length===3');wait(page)
+    imported=page.evaluate('DiffusionLab.getState()')
+    check('All SVG paths form one board and preserve the imported aspect ratio',abs(imported['height']/imported['width']-40/90)<1e-9 and imported['shape']=='svg' and '3パス' in page.locator('#svgShapeSummary').inner_text())
+    check('Group transforms are applied before normalizing the combined outline',page.evaluate('''()=>{
+        const p=SVGImport.read(document.getElementById('svgSource').value).paths;
+        return p.every(p=>JSON.stringify(p.matrix)==='[2,0,0,2,100,40]') &&
+          Math.abs(DiffusionLab.getState().svgShapes[2].contours[0][0][0]-80/90*100)<1e-4;
+    }'''))
+    check('SVG holes and disconnected gaps affect LED placement and the solver mask',page.evaluate('''()=>{
+        const s=DiffusionLab.getState(),r=DiffusionLab.getResult(),info=Optics.shapeInfo(s);
+        const at=(x,y)=>[(x/90-.5)*s.width,(y/40-.5)*s.height];
+        const hole=at(20,20),gap=at(70,20),overlap=at(37,20),island=at(85,20);
+        const idx=(p)=>Math.floor((p[1]+s.height/2)/r.dy)*r.nx+Math.floor((p[0]+s.width/2)/r.dx);
+        return !info.inside(...hole) && !info.inside(...gap) && info.inside(...overlap) && info.inside(...island) &&
+          r.mask[idx(hole)]===0 && r.mask[idx(gap)]===0 && r.fields.every(f=>f[idx(hole)]===0) && r.leds.every(p=>info.inside(p.x,p.y));
+    }'''))
+    page.locator('[data-view="layout"]').click();page.evaluate('document.getElementById("sidebar").scrollTop=0');page.screenshot(path=str(ARTIFACTS/'preview-svg-outline.png'),full_page=True)
+    with page.expect_download(timeout=10000) as event:page.locator('#saveBtn').click()
+    event.value.save_as(str(ARTIFACTS/'test-svg-settings.json'))
+    set_state(page,{'shape':'rounded','svgShapes':[]})
+    page.locator('#fileInput').set_input_files(ARTIFACTS/'test-svg-settings.json');page.wait_for_function('DiffusionLab.getState().shape==="svg"');wait(page)
+    check('SVG contours and fill rules survive settings JSON round trip',page.evaluate('DiffusionLab.getState()')==imported|{'view':'layout'})
+    if not args.embedded:
+        page.reload(wait_until='load');wait(page)
+        check('SVG outlines persist across HTTP reload without the original file',page.evaluate('DiffusionLab.getState().svgShapes.length===3 && DiffusionLab.getResult().state.shape==="svg"') and page.locator('#svgSource').input_value()=='')
+    # Native curve sampling retains cubic, quadratic and arc contours, rather than only their endpoints.
+    for label,d in [('Bezier','M0 0 C0 40 20 60 40 40 S80 0 100 20 L100 80 Q60 100 40 80 T0 80 Z'),('Arc','M100 50 A50 50 0 1 1 0 50 A50 50 0 1 1 100 50 Z')]:
+        page.locator('#svgSource').fill(d);page.locator('#svgApplyBtn').click();page.wait_for_function('DiffusionLab.getState().svgLabel==="貼り付けたパス"');wait(page)
+        check(label+' path curves are flattened and calculated',page.evaluate('DiffusionLab.getState().svgShapes[0].contours[0].length>20 && DiffusionLab.getResult().stats.mean>0') and page.locator('#svgSource').get_attribute('aria-invalid')=='false')
+    check('Arc silhouette is circular and not reduced to a bounding box',page.evaluate('''()=>{const s=DiffusionLab.getState(),info=Optics.shapeInfo(s);return info.inside(0,0)&&!info.inside(s.width*.45,s.height*.45)&&Math.abs(s.width-s.height)<.01;}'''))
+    previous=page.evaluate('DiffusionLab.getState()')
+    for label,source in [('bad path','M0 0 L50'),('bad XML','<svg><path d="M0 0H100V100Z"></svg>'),('degenerate path','M0 0L100 0Z'),('missing paths','<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100"/></svg>')]:
+        page.locator('#svgSource').fill(source);page.locator('#svgApplyBtn').click()
+        check('Rejected SVG keeps the applied board intact: '+label,page.evaluate('DiffusionLab.getState()')==previous and page.locator('#svgSource').get_attribute('aria-invalid')=='true')
+    open_path='M0 0 H100 V50 H0'
+    page.locator('#svgSource').fill(open_path);page.locator('#svgKeepAspect').uncheck();page.locator('#svgApplyBtn').click();wait(page)
+    check('Open paths close for filling and the explicit physical dimensions can be kept',page.evaluate('DiffusionLab.getState().height')==previous['height'] and '直線で閉じました' in page.locator('#svgImportStatus').inner_text())
+    css_svg='<svg xmlns="http://www.w3.org/2000/svg"><style>path {fill-rule:evenodd}</style><path d="M0 0H100V100H0Z M30 30H70V70H30Z"/></svg>'
+    page.locator('#svgSource').fill(css_svg);page.locator('#svgFillRule').select_option('auto');page.locator('#svgApplyBtn').click()
+    check('CSS fill rule requires an explicit choice instead of silently filling holes','明示指定' in page.locator('#svgImportStatus').inner_text())
+    page.locator('#svgFillRule').select_option('evenodd');page.locator('#svgApplyBtn').click();wait(page)
+    check('Explicit evenodd handles CSS-styled holes',page.evaluate('!Optics.shapeInfo(DiffusionLab.getState()).inside(0,0)'))
+    page.locator('#svgSource').fill('<svg xmlns="http://www.w3.org/2000/svg"><style>path {transform:rotate(20deg)}</style><path d="M0 0H100V100H0Z"/></svg>');page.locator('#svgApplyBtn').click()
+    check('Unsupported CSS transforms are rejected instead of changing the outline silently','transform属性へ変換' in page.locator('#svgImportStatus').inner_text())
+    malicious='<svg xmlns="http://www.w3.org/2000/svg"><script>window.__svgExecuted=1</script><image href="https://invalid.example/never-load.svg"/><path onload="window.__svgExecuted=2" d="M0 0H100V100H0Z"/></svg>'
+    malicious='<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "https://invalid.example/never-load.dtd">'+malicious
+    page.evaluate('window.__svgExecuted=0');page.locator('#svgSource').fill(malicious);page.locator('#svgApplyBtn').click();wait(page)
+    check('SVG import creates geometry without running source scripts or loading resources',page.evaluate('window.__svgExecuted===0 && !document.querySelector("image") && !document.querySelector("path[onload]")'))
+    # Standalone SVG geometry remains usable in the existing layouts and export paths.
+    for layout in ['rows','grid','perimeter','ring','path']:
+        set_state(page,{'layout':layout})
+        check('SVG outline supports LED layout: '+layout,page.evaluate('Number.isFinite(DiffusionLab.getResult().stats.mean) && document.getElementById("errorBanner").hidden'))
     set_state(page,{'shape':'rounded','width':160,'height':72})
     for layout in ['rows','grid','perimeter','ring','path']:
         set_state(page,{'layout':layout})
@@ -232,6 +296,10 @@ with sync_playwright() as p:
     mobile.locator('#tapeX').fill('68');mobile.locator('#tapeY').fill('2');mobile.locator('#applyTapePosition').click();wait(mobile)
     check('Mobile tape coordinates apply and the editor fits the viewport',taped_layout(mobile)['manual'][9][:2]==[68,2] and mobile.evaluate('document.documentElement.scrollWidth <= innerWidth'))
     mobile.screenshot(path=str(ARTIFACTS/'preview-mobile-tape-editor.png'),full_page=True)
+    mobile.locator('[data-key="shape"]').select_option('svg');mobile.wait_for_function('!DiffusionLab.isBusy()')
+    mobile.locator('#svgSource').fill('M0 0H100V100H0Z M30 30H70V70H30Z');mobile.locator('#svgFillRule').select_option('evenodd');mobile.locator('#svgApplyBtn').click();wait(mobile)
+    check('Mobile SVG import and outline controls fit the viewport',mobile.evaluate('DiffusionLab.getState().shape==="svg" && !Optics.shapeInfo(DiffusionLab.getState()).inside(0,0) && document.documentElement.scrollWidth <= innerWidth'))
+    mobile.screenshot(path=str(ARTIFACTS/'preview-mobile-svg-editor.png'),full_page=True)
     check('No mobile JavaScript runtime errors',not errors)
     # Standalone/offline payload still calculates after the page has been loaded.
     offline=browser.new_page()

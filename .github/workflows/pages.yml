@@ -42,6 +42,10 @@ jobs:
         run: |
           node --check src/optics.js
           node --check src/worker.js
+          node --check src/svg-import.js
+          node --check src/gaming.js
+          node --check src/tape-tools.js
+          node --check src/view3d.js
           node --check src/app.js
 
       - name: Build standalone HTML and Pages payload
@@ -51,7 +55,7 @@ jobs:
         run: python -m unittest discover -s tests -p "test_build.py" -v
 
       - name: Test optical calculations
-        run: node --test tests/test_optics.js tests/test_led_profiles.js
+        run: node --test tests/test_optics.js tests/test_led_profiles.js tests/test_svg.js tests/test_tape_tools.js tests/test_gaming.js tests/test_view3d.js
 
       - name: Install browser test dependencies
         run: |
@@ -59,7 +63,9 @@ jobs:
           python -m playwright install --with-deps chromium
 
       - name: Test browser UI over HTTP
-        run: python tests/test_browser.py
+        run: |
+          python tests/test_browser.py
+          python tests/test_features.py
 
       - name: Upload only the built website
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

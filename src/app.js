@@ -5,7 +5,8 @@ let state=O.normalize(), result=null, baseline=null, worker=null, busy=false, pe
 let sweepWorker=null,sweepResults=[],sweepKey='',sweepRun=0,sweepComplete=false;
 let map=null,selectedTape=-1,dragTape=null,drawingPath=false,pathDraft=[],lastAutoLayout={manual:[],tapeLengths:[]};
 try{const saved=localStorage.getItem(KEY);if(saved)state=O.normalize(JSON.parse(saved));}catch(_){/* Private/file contexts may deny storage. */}
-const displayKeys=new Set(['view','exposure','tone','ambient','showLED','showGrid','whiteLevel','target','customLabel']);
+let gamingWorker=null,gamingFrames=[],gamingKey='',gamingPreparing=false,gamingRun=0,gamingRAF=0,gamingLast=0,gamingOutput=null,orbit=null;
+const displayKeys=new Set(['renderMode','cameraYaw','cameraPitch','cameraZoom','gamingSpeed','view','exposure','tone','ambient','showLED','showGrid','whiteLevel','target','customLabel']);
 const materialPresets={opal:{argb:'#FFFFFFFF',thickness:3,transmission:45,diffuse:100,spread:.65},strong:{argb:'#FFFFFFFF',thickness:3,transmission:30,diffuse:100,spread:1.1},frost:{argb:'#FFFFFFFF',thickness:2,transmission:82,diffuse:90,spread:.2},clear:{argb:'#00FFFFFF',thickness:2,transmission:92,diffuse:0,spread:0},foam:{argb:'#FFFFFEF5',thickness:3,transmission:25,diffuse:100,spread:1.25}};
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(_){}}
 function toast(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,4500);}
@@ -13,10 +14,46 @@ function error(text){$('errorBanner').textContent=text;$('errorBanner').hidden=!
 function format(n,dec=1){if(n===null||!Number.isFinite(n))return '—';return n.toLocaleString('ja-JP',{maximumFractionDigits:dec,minimumFractionDigits:dec});}
 function metric(el,value,unit){const box=$(el);box.textContent=value;const sm=document.createElement('small');sm.textContent=unit;box.appendChild(sm);}
 function status(text,kind=''){const box=$('status');box.className='status '+kind;$('statusText').textContent=text;}
-function createWorker(){const content=$('solver-core').textContent+'\n'+$('worker-source').textContent;const url=URL.createObjectURL(new Blob([content],{type:'text/javascript'}));let w=new Worker(url);URL.revokeObjectURL(url);return w;}
+function createWorker(){const content=$('gaming-core').textContent+'\n'+$('solver-core').textContent+'\n'+$('worker-source').textContent;const url=URL.createObjectURL(new Blob([content],{type:'text/javascript'}));let w=new Worker(url);URL.revokeObjectURL(url);return w;}
+function gamingActive(){return state.pattern==='gaming'&&state.gamingPlaying;}
+function gamingCacheKey(){const s={...state};for(const k of [...displayKeys,'gamingPhase','gamingPlaying','gamingSpeed','quality'])delete s[k];return JSON.stringify(s);}
+function syncGaming(){
+ $('gamingPlayBtn').textContent=gamingActive()?'停止':'再生';$('gamingPhase').value=state.gamingPhase*100;
+ $('gamingPhaseLabel').textContent=format(state.gamingPhase*100,1)+'%';
+ if(state.pattern==='gaming')$('gamingStatus').textContent=gamingPreparing?'光の重なりを準備中…':gamingActive()?'再生中 · 高速解像度 / 24フレームを補間':'停止中 · 指定精度で計算';
+}
+function stopGamingClock(){cancelAnimationFrame(gamingRAF);gamingRAF=0;gamingLast=0;}
+function ensureGaming(){
+ const key=gamingCacheKey();
+ if(key!==gamingKey){if(gamingWorker)gamingWorker.terminate();gamingWorker=null;gamingRun++;gamingPreparing=false;gamingFrames=[];gamingOutput=null;gamingKey=key;stopGamingClock();}
+ if(!gamingActive()){stopGamingClock();if(gamingWorker){gamingWorker.terminate();gamingWorker=null;gamingRun++;gamingPreparing=false;gamingFrames=[];}syncGaming();return;}
+ if(gamingFrames.length===24&&!gamingPreparing){if(!gamingRAF){gamingLast=performance.now();gamingRAF=requestAnimationFrame(gamingTick);}syncGaming();return;}
+ if(gamingWorker)return;
+ try{gamingWorker=createWorker();}catch(e){state.gamingPlaying=false;syncGaming();toast('演出を開始できませんでした。 '+e.message);return;}
+ gamingPreparing=true;const id=++gamingRun;syncGaming();
+ gamingWorker.onmessage=e=>{const data=e.data;if(data.id!==gamingRun)return;
+  if(data.type==='gamingItem'){gamingFrames[data.index]=data.result;$('gamingStatus').textContent=`光の重なりを準備中… ${data.index+1} / ${data.total}`;}
+  else if(data.type==='gamingDone'){gamingWorker.terminate();gamingWorker=null;gamingPreparing=false;if(!gamingRAF){gamingLast=performance.now();gamingRAF=requestAnimationFrame(gamingTick);}syncGaming();toggleExport();}
+  else if(data.type==='error')gamingFailed(data.message);
+ };
+ gamingWorker.onerror=e=>gamingFailed(e.message);gamingWorker.postMessage({id,type:'gaming',state:structuredClone(state)});
+}
+function gamingFailed(message){if(gamingWorker)gamingWorker.terminate();gamingWorker=null;gamingRun++;gamingPreparing=false;gamingFrames=[];state.gamingPlaying=false;stopGamingClock();syncGaming();toggleExport();toast('演出の計算を停止しました。 '+message);}
+function gamingTick(now){
+ gamingRAF=0;if(!gamingActive()||gamingPreparing||gamingFrames.length!==24)return;
+ const elapsed=now-gamingLast;if(elapsed>=1000/30){
+  state.gamingPhase=Gaming.wrap(state.gamingPhase+Math.min(elapsed,250)/1000*state.gamingSpeed/Gaming.scenes[state.gamingScene].period);gamingLast=now;
+  gamingOutput=Gaming.interpolate(gamingFrames,state.gamingPhase,gamingOutput);gamingOutput.stats=O.statistics(gamingOutput.fields,gamingOutput.mask,gamingOutput.roiMask,gamingOutput.nx,gamingOutput.ny,gamingOutput.dx,gamingOutput.dy);result=gamingOutput;
+  drawMain();drawProfile();updateMetrics();drawBaseline();syncGaming();
+ }
+ gamingRAF=requestAnimationFrame(gamingTick);
+}
+function pauseGaming(compute=true){state.gamingPlaying=false;ensureGaming();persist();syncGaming();if(compute)requestCompute(0);toggleExport();}
+$('gamingPlayBtn').addEventListener('click',()=>{if(gamingActive())pauseGaming();else{state.gamingPlaying=true;clearSweepForChange();persist();requestCompute(0);syncGaming();}});
+$('gamingPhase').addEventListener('input',e=>{const phase=Number(e.target.value)/100;pauseGaming(false);state.gamingPhase=phase;persist();syncGaming();clearSweepForChange();requestCompute(80);});
 function initWorker(){try{worker=createWorker();worker.onmessage=onWorkerMessage;worker.onerror=e=>{busy=false;status('WORKER ERROR','error');error('計算プロセスでエラーが発生しました。ページを再読み込みしてください。 '+e.message);toggleExport();};}catch(e){error('Web Workerを開始できませんでした。Chrome / Edge / Firefoxの通常ウィンドウで開くか、ローカルHTTPサーバーで開いてください。 '+e.message);status('UNAVAILABLE','error');}}
 function requestCompute(delay=130){
- latest++;pending={id:latest,type:'solve',state:structuredClone(state)};
+ ensureGaming();latest++;pending={id:latest,type:'solve',state:structuredClone(state)};
  status(result?'計算待ち · 画像は直前の条件':'計算中…','busy');$('progress').style.width='35%';toggleExport();
  clearTimeout(timer);timer=setTimeout(sendPending,delay);
 }
@@ -29,11 +66,11 @@ function onWorkerMessage(e){
  }
  toggleExport();if(pending)sendPending();
 }
-function toggleExport(){const disabled=!result||busy||pending!==null||!!dragTape||!$('errorBanner').hidden;for(const id of ['pngBtn','csvBtn','pinBtn','autoExposure'])$(id).disabled=disabled;$('saveBtn').disabled=!!dragTape;$('sweepBtn').disabled=!!dragTape||!!sweepWorker;}
+function toggleExport(){const disabled=!result||busy||pending!==null||!!dragTape||gamingActive()||gamingPreparing||!$('errorBanner').hidden;for(const id of ['pngBtn','csvBtn','pinBtn','autoExposure'])$(id).disabled=disabled;$('saveBtn').disabled=!!dragTape;$('sweepBtn').disabled=!!dragTape||!!sweepWorker;}
 function designKey(s){const a={...s};for(const k of displayKeys)delete a[k];delete a.gap;delete a.quality;return JSON.stringify(a);}
 function clearSweepForChange(){if(sweepKey&&sweepKey!==designKey(state)){cancelSweep(false);sweepResults=[];sweepKey='';sweepComplete=false;$('sweepBottom').hidden=true;$('comparisonTiles').replaceChildren();const div=document.createElement('div');div.className='empty-comparison';div.textContent='条件が変わりました。「6つの距離を計算」で再比較してください。';$('comparisonTiles').appendChild(div);$('sweepStatus').textContent='過去の比較を破棄しました。距離以外の設定をそろえて再計算します。';}}
 function syncControls(){
- document.querySelectorAll('[data-key]').forEach(el=>{const k=el.dataset.key;if(document.activeElement===el&&(el.tagName==='TEXTAREA'||el.type==='text'||el.type==='number'))return;if(el.type==='checkbox')el.checked=!!state[k];else el.value=k==='aperture'?Number(state[k].toFixed(3)):state[k];});
+ document.querySelectorAll('[data-key]').forEach(el=>{const k=el.dataset.key;if(document.activeElement===el&&(el.tagName==='TEXTAREA'||el.type==='text'||el.type==='number'))return;if(el.type==='checkbox')el.checked=!!state[k];else el.value=['aperture','width','height'].includes(k)?Number(state[k].toFixed(3)):state[k];});
  document.querySelectorAll('[data-out]').forEach(el=>{const k=el.dataset.out;el.textContent=String(state[k])+(el.dataset.suffix||'');});
  document.querySelectorAll('[data-show],[data-hide]').forEach(el=>{const rule=el.dataset.show||el.dataset.hide,[k,list]=rule.split(':'),matches=list.split(',').includes(String(state[k]));el.hidden=el.hasAttribute('data-show')?!matches:matches;});
  document.querySelectorAll('[data-view]').forEach(btn=>{const active=btn.dataset.view===state.view;btn.classList.toggle('active',active);btn.setAttribute('aria-selected',String(active));});
@@ -42,8 +79,28 @@ function syncControls(){
  $('materialPicker').value='#'+state.argb.slice(3);
  $('heatKey').style.display=state.view==='heat'?'block':'none';
  $('canvasLabel').textContent=state.view==='layout'?'LED LAYOUT · X → / Y ↓':state.view==='heat'?'LUMINANCE MAP · IMAGE P95 SCALE':'FRONT VIEW · PARALLEL PLANES';
- syncLEDSpec();syncTapeEditor();
+ $('cameraControls').hidden=state.view!=='appearance'||state.renderMode!=='3d';
+ if(state.view==='appearance'&&state.renderMode==='3d')$('canvasLabel').textContent='3D · FRONT LIGHTING ON PARALLEL PLANES';
+ $('mainCanvas').setAttribute('aria-label',state.view==='appearance'&&state.renderMode==='3d'?'拡散板・LED・ベースの3D表示':state.view==='layout'?'LEDテープの配置編集':'拡散板の正面シミュレーション');
+ syncLEDSpec();syncTapeEditor();syncSVGSummary();syncGaming();
 }
+function svgStatus(text,invalid=false){$('svgImportStatus').textContent=text;$('svgImportStatus').classList.toggle('invalid',invalid);$('svgSource').setAttribute('aria-invalid',String(invalid));}
+function syncSVGSummary(){const shapes=state.svgShapes,n=shapes.reduce((n,s)=>n+s.contours.reduce((m,c)=>m+c.length,0),0);$('svgShapeSummary').textContent=n?`適用済み：${state.svgLabel||'SVG輪郭'} · ${shapes.length}パス / ${shapes.reduce((n,s)=>n+s.contours.length,0)}輪郭 / ${n}頂点`:'SVG輪郭はまだ適用されていません。';}
+$('svgFileBtn').addEventListener('click',()=>$('svgFileInput').click());
+let svgReadVersion=0;
+$('svgFileInput').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;const version=++svgReadVersion;
+ try{if(file.size>2*1024*1024)throw Error('SVGは2 MB以下にしてください。');const source=await file.text();if(version!==svgReadVersion)return;const parsed=SVGImport.read(source);$('svgSource').value=source;svgStatus(`${file.name}：${parsed.paths.length}パスを読み込みました。「全パスを輪郭に適用」で反映します。`);}
+ catch(e){svgStatus(e.message,true);}finally{e.target.value='';}
+});
+$('svgSource').addEventListener('input',()=>{svgReadVersion++;svgStatus('入力を変更しました。「全パスを輪郭に適用」で反映します。');});
+$('svgApplyBtn').addEventListener('click',()=>{
+ try{const parsed=SVGImport.read($('svgSource').value),geometry=SVGImport.flatten(parsed,'all',$('svgFillRule').value);let width=state.width,height=state.height;
+  if($('svgKeepAspect').checked){height=width*geometry.aspect;if(height<10){height=10;width=height/geometry.aspect;}if(height>2000){height=2000;width=height/geometry.aspect;}if(width<10||width>2000)throw Error('縦横比を保持すると寸法の10〜2,000 mm範囲に収まりません。「縦横比を保つ」を解除するか、パスを調整してください。');}
+  const next=O.normalize({...state,shape:'svg',svgShapes:geometry.shapes,svgLabel:geometry.label,width,height});O.makeLEDs(next);
+  resetTapeEditor();state=next;persist();syncControls();clearSweepForChange();renderAll();requestCompute(0);
+  svgStatus(`${parsed.paths.length}パスをまとめて適用しました。${geometry.contours}輪郭・${geometry.points}頂点。${geometry.open?'閉じていない輪郭は始点・終点を直線で閉じました。':''}`);
+ }catch(e){svgStatus(e.message,true);}
+});
 function syncLEDSpec(){
  const p=O.ledProfiles[state.ledModel],description=O.ledDescription(state);
  const size=document.querySelector('[data-key="packageSize"]');size.readOnly=!!p;
@@ -67,6 +124,8 @@ function applyChange(key,value){
  if(key==='ledModel')state=O.selectLEDModel(state,value);
  if(key==='material'&&materialPresets[value])Object.assign(state,materialPresets[value]);
  state[key]=value;
+ if(key==='pattern'){state.gamingPlaying=value==='gaming';state.gamingPhase=0;}
+ if(key==='gamingScene'){state.gamingPhase=0;state.gamingPlaying=true;}
  if(['argb','thickness','transmission','diffuse','spread'].includes(key))state.material='custom';
  if(key==='layout'&&value==='manual'){
   state.view='layout';
@@ -79,7 +138,7 @@ function applyChange(key,value){
 }
 $('ledPresetBtn').addEventListener('click',()=>applyChange('ledModel',state.ledModel));
 for(const el of document.querySelectorAll('[data-key]')){
- if(el.type==='number')el.addEventListener('blur',()=>{el.value=el.dataset.key==='aperture'?Number(state.aperture.toFixed(3)):state[el.dataset.key];});
+ if(el.type==='number')el.addEventListener('blur',()=>{el.value=['aperture','width','height'].includes(el.dataset.key)?Number(state[el.dataset.key].toFixed(3)):state[el.dataset.key];});
  el.addEventListener('input',()=>{
   let k=el.dataset.key,v=el.type==='checkbox'?el.checked:el.value;
   if(['number','range'].includes(el.type)){if(el.value===''||!Number.isFinite(+v))return;v=+v;}
@@ -104,7 +163,8 @@ $('scenePreset').addEventListener('change',e=>{
  resetTapeEditor();state=O.normalize(s);persist();syncControls();clearSweepForChange();requestCompute(0);e.target.value='';
 });
 function fitCanvas(canvas){const rect=canvas.getBoundingClientRect();const w=Math.max(10,rect.width),h=Math.max(10,rect.height),dpr=Math.min(window.devicePixelRatio||1,2);if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);return {ctx,w,h};}
-function polygonPath(ctx,s,ox,oy,scale){ctx.beginPath();const p=O.outline(s);p.forEach((v,i)=>{const x=ox+v[0]*scale,y=oy+v[1]*scale;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.closePath();if(s.shape==='ring'){ctx.moveTo(ox+s.width/2*s.hole*scale,oy);ctx.ellipse(ox,oy,s.width/2*s.hole*scale,s.height/2*s.hole*scale,0,0,Math.PI*2);}}
+function contourPath(ctx,contours,ox,oy,scale){ctx.beginPath();for(const p of contours){p.forEach((v,i)=>i?ctx.lineTo(ox+v[0]*scale,oy+v[1]*scale):ctx.moveTo(ox+v[0]*scale,oy+v[1]*scale));ctx.closePath();}}
+function polygonPath(ctx,s,ox,oy,scale){if(s.shape==='svg'){ctx.beginPath();for(const [a,b] of O.svgGeometry(s).boundary){ctx.moveTo(ox+a[0]*scale,oy+a[1]*scale);ctx.lineTo(ox+b[0]*scale,oy+b[1]*scale);}return;}contourPath(ctx,[O.outline(s)],ox,oy,scale);if(s.shape==='ring'){ctx.moveTo(ox+s.width/2*s.hole*scale,oy);ctx.ellipse(ox,oy,s.width/2*s.hole*scale,s.height/2*s.hole*scale,0,0,Math.PI*2);}}
 function bitmap(r,display={}){const c=document.createElement('canvas');c.width=r.nx;c.height=r.ny;c.getContext('2d').putImageData(new ImageData(O.rgba(r,display),r.nx,r.ny),0,0);return c;}
 function displayOptions(view='appearance'){return {exposure:state.exposure,whiteLevel:state.whiteLevel,tone:state.tone,ambient:state.ambient,view};}
 function drawSurface(ctx,r,box,opts=displayOptions(),border=true){const s=r.state,scale=Math.min(box.w/s.width,box.h/s.height),w=s.width*scale,h=s.height*scale,x=box.x+(box.w-w)/2,y=box.y+(box.h-h)/2;ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(bitmap(r,opts),x,y,w,h);if(border){polygonPath(ctx,s,x+w/2,y+h/2,scale);ctx.strokeStyle='#d8e1ff24';ctx.lineWidth=1;ctx.stroke();}return {x,y,w,h,scale,ox:x+w/2,oy:y+h/2};}
@@ -133,11 +193,12 @@ function drawLEDs(ctx,leds,s,m,overlay=false){
 }
 function drawMain(){
  const {ctx,w,h}=fitCanvas($('mainCanvas'));let s=result?result.state:state,leds=result?result.leds:[];
+ if(state.view==='appearance'&&state.renderMode==='3d'&&result){map=null;DiffusionView3D.render(ctx,result,{width:w,height:h,texture:bitmap(result,displayOptions()),optics:O,yaw:state.cameraYaw,pitch:state.cameraPitch,zoom:state.cameraZoom,showLED:state.showLED,showGrid:state.showGrid});$('dimensionLabel').textContent=format(s.width,0)+' × '+format(s.height,0)+' mm · 厚さ '+format(s.thickness,1)+' mm';$('gridLabel').textContent='ドラッグで視点回転 · ホイールで拡大';return;}
  if(state.view==='layout'){s=state;try{const layout=dragTape?dragTape.preview:O.tapeLayout(state),colors=O.ledColors(state,layout.manual.length);leds=[];for(const tape of O.tapeRanges(layout))for(let i=tape.start;i<tape.start+tape.length;i++){const p=layout.manual[i];leds.push({x:p[0],y:p[1],angle:p[2],rgb:colors[i],index:i,tapeIndex:tape.index});}}catch(_){}}
  const scale=Math.min((w-120)/s.width,(h-108)/s.height),bw=s.width*scale,bh=s.height*scale;
  const m={scale,x:(w-bw)/2,y:(h-bh)/2+3,w:bw,h:bh,ox:w/2,oy:h/2+3};map={...m,state:s};drawGrid(ctx,w,h,s,m);
  if(state.view==='layout'){
-  try{polygonPath(ctx,s,m.ox,m.oy,m.scale);ctx.fillStyle='#1b222b';ctx.fill('evenodd');ctx.strokeStyle='#4c596b';ctx.lineWidth=1;ctx.stroke();drawLEDs(ctx,leds,s,m,false);}catch(_){return;}
+  try{ctx.fillStyle='#1b222b';if(s.shape==='svg'){for(const shape of O.svgGeometry(s).shapes){contourPath(ctx,shape.contours,m.ox,m.oy,m.scale);ctx.fill(shape.fillRule);}}else{polygonPath(ctx,s,m.ox,m.oy,m.scale);ctx.fill('evenodd');}polygonPath(ctx,s,m.ox,m.oy,m.scale);ctx.strokeStyle='#4c596b';ctx.lineWidth=1;ctx.stroke();drawLEDs(ctx,leds,s,m,false);}catch(_){return;}
  }else if(result){drawSurface(ctx,result,{x:m.x,y:m.y,w:m.w,h:m.h},displayOptions(state.view));if(state.showLED)drawLEDs(ctx,leds,s,m,true);}
  drawDimensions(ctx,s,m);
  if(drawingPath){ctx.strokeStyle='#71e5cf';ctx.lineWidth=2;ctx.beginPath();pathDraft.forEach((p,i)=>i?ctx.lineTo(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale):ctx.moveTo(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale));ctx.stroke();ctx.fillStyle='#71e5cf';for(const p of pathDraft){ctx.beginPath();ctx.arc(m.ox+p[0]*m.scale,m.oy+p[1]*m.scale,4,0,Math.PI*2);ctx.fill();}}
@@ -177,6 +238,7 @@ function drawSweepGraph(){const rs=sweepResults.filter(Boolean);if(!rs.length)re
 }
 function cancelSweep(notify=true){if(sweepWorker){sweepWorker.terminate();sweepWorker=null;}sweepRun++;$('cancelSweep').hidden=true;$('sweepBtn').disabled=false;if(notify){$('sweepStatus').textContent='比較を中止しました。表示されているのは計算済みの条件のみです。';sweepComplete=false;drawSweepGraph();}}
 $('sweepBtn').addEventListener('click',()=>{
+ if(gamingActive())pauseGaming(true);
  cancelSweep(false);sweepResults=[];sweepComplete=false;sweepKey=designKey(state);const id=++sweepRun;$('comparisonTiles').replaceChildren();const d=document.createElement('div');d.className='empty-comparison';d.textContent='同じ条件で距離を変えながら計算しています…';$('comparisonTiles').appendChild(d);$('sweepBtn').disabled=true;$('cancelSweep').hidden=false;$('sweepBottom').hidden=true;$('sweepStatus').textContent='比較を計算中…';
  try{sweepWorker=createWorker();}catch(e){toast('比較用プロセスを開始できませんでした。');cancelSweep(false);return;}
  sweepWorker.onmessage=e=>{const data=e.data;if(data.id!==sweepRun)return;if(data.type==='sweepItem'){sweepResults[data.index]=data.result;$('sweepStatus').textContent=`${data.index+1} / ${data.total} 条件を計算済み · 同一露出 · 高速解像度`;drawSweepTiles();drawSweepGraph();}else if(data.type==='sweepDone'){sweepComplete=true;$('sweepStatus').textContent='6条件の計算完了 · 高速解像度・同一露出。最終判断前に高精細と実機で確認してください。';$('cancelSweep').hidden=true;$('sweepBtn').disabled=false;sweepWorker.terminate();sweepWorker=null;drawSweepGraph();}else if(data.type==='error'){toast(data.message);cancelSweep(false);}};
@@ -197,8 +259,12 @@ function syncTapeEditor(){
  if(!tapes[selectedTape])selectedTape=-1;select.value=String(selectedTape);
  select.disabled=!tapes.length||!!dragTape||drawingPath;
  const tape=tapes[selectedTape],disabled=!tape||!!dragTape||drawingPath;
- for(const id of ['tapeX','tapeY','applyTapePosition'])$(id).disabled=disabled;
+ for(const id of ['tapeX','tapeY','applyTapePosition','tapeAngle','applyTapeAngle'])$(id).disabled=disabled;
  $('convertManual').disabled=!lastAutoLayout.manual.length||!!dragTape;$('clearManual').disabled=!state.manual.length||!!dragTape;
+ $('tapeCount').value=tapes.length;$('applyTapeCount').disabled=!!dragTape||drawingPath;
+ $('tapeCount').disabled=!!dragTape||drawingPath;
+ $('tapeAngle').value=tape?Number(TapeTools.rotation(O,layout,selectedTape).toFixed(2)):'';
+ document.querySelectorAll('[data-align]').forEach(btn=>btn.disabled=!!dragTape||drawingPath||!tapes.length||($('alignScope').value==='selected'&&!tape));
  const anchor=tape?layout.manual[tape.start]:null;
  $('tapeX').value=anchor?Number(anchor[0].toFixed(3)):'';$('tapeY').value=anchor?Number(anchor[1].toFixed(3)):'';
  tapeMessage(drawingPath?'経路を確定するとテープを移動できます。':tape?`${tape.length} LEDを接続したまま移動します。`:'画面上のテープ、または上の一覧から選択してください。');
@@ -206,9 +272,9 @@ function syncTapeEditor(){
 function cancelTapeDrag(){
  if(!dragTape)return;const id=dragTape.pointerId;dragTape=null;if($('mainCanvas').hasPointerCapture(id))$('mainCanvas').releasePointerCapture(id);toggleExport();
 }
-function resetTapeEditor(){cancelTapeDrag();selectedTape=-1;drawingPath=false;pathDraft=[];}
+function resetTapeEditor(){cancelTapeDrag();$('tapeCountStatus').textContent='';$('tapeCount').setAttribute('aria-invalid','false');selectedTape=-1;drawingPath=false;pathDraft=[];}
 function commitTapeLayout(layout){
- cancelTapeDrag();drawingPath=false;pathDraft=[];Object.assign(state,layout,{layout:'manual',view:'layout'});state=O.normalize(state);persist();syncControls();clearSweepForChange();drawMain();requestCompute(0);
+ cancelTapeDrag();drawingPath=false;pathDraft=[];Object.assign(state,layout,{layout:'manual',view:'layout',tapeCount:0});state=O.normalize(state);persist();syncControls();clearSweepForChange();drawMain();requestCompute(0);
 }
 function applyTapePosition(){
  if(dragTape||drawingPath||state.view!=='layout')return;
@@ -218,8 +284,34 @@ function applyTapePosition(){
 }
 $('tapeSelect').addEventListener('change',e=>{selectedTape=Number(e.target.value);syncTapeEditor();drawMain();});
 $('applyTapePosition').addEventListener('click',applyTapePosition);
+function applyTapeCount(){
+ const count=Number($('tapeCount').value),layout=editorLayout();
+ try{if(!$('tapeCount').value.trim()||!Number.isInteger(count)||count<1||count>100)throw Error('LEDテープの本数は1〜100の整数で指定してください。');
+  if(count===layout.tapeLengths.length){$('tapeCountStatus').textContent='現在の本数と同じです。';return;}
+  if(state.layout==='rows'){
+   const available=state.height-2*Math.max(state.inset,state.packageSize/2),spacing=count>1?Math.min(state.rowSpacing,available/(count-1)):state.rowSpacing;
+   if(spacing<state.packageSize+1&&count>1)throw Error('指定本数を並べる幅がありません。板を広げるか、本数を減らしてください。');
+   const next=O.normalize({...state,tapeCount:count,rowSpacing:spacing});O.makeLEDs(next);resetTapeEditor();state=next;persist();syncControls();clearSweepForChange();drawMain();requestCompute(0);
+  }else commitTapeLayout(TapeTools.resize(O,state,layout,count,selectedTape));
+  $('tapeCountStatus').textContent=`LEDテープを${count}本にしました。`;$('tapeCount').setAttribute('aria-invalid','false');
+ }catch(e){$('tapeCountStatus').textContent=e.message;$('tapeCount').setAttribute('aria-invalid','true');}
+}
+$('applyTapeCount').addEventListener('click',applyTapeCount);$('tapeCount').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyTapeCount();}});
+function applyTapeAngle(){try{if(!$('tapeAngle').value.trim())throw Error('角度を入力してください。');const degrees=Number($('tapeAngle').value);if(degrees<-180||degrees>180)throw Error('角度は−180〜180°で指定してください。');commitTapeLayout(TapeTools.rotate(O,state,editorLayout(),selectedTape,degrees));}catch(e){tapeMessage(e.message,true);}}
+$('applyTapeAngle').addEventListener('click',applyTapeAngle);$('tapeAngle').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyTapeAngle();}});
+$('alignScope').addEventListener('change',syncTapeEditor);
+for(const btn of document.querySelectorAll('[data-align]'))btn.addEventListener('click',()=>{try{commitTapeLayout(TapeTools.align(O,state,editorLayout(),$('alignScope').value==='all'?null:[selectedTape],btn.dataset.align));}catch(e){tapeMessage(e.message,true);}});
 for(const id of ['tapeX','tapeY'])$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyTapePosition();}});
 function segmentDistance(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],t=O.clamp(((p.x-a[0])*dx+(p.y-a[1])*dy)/(dx*dx+dy*dy||1),0,1);return Math.hypot(p.x-a[0]-t*dx,p.y-a[1]-t*dy);}
+function syncCamera(){for(const k of ['cameraYaw','cameraPitch','cameraZoom'])document.querySelector(`[data-key="${k}"]`).value=state[k];}
+$('resetCamera').addEventListener('click',()=>{Object.assign(state,{cameraYaw:O.defaults.cameraYaw,cameraPitch:O.defaults.cameraPitch,cameraZoom:1});syncCamera();persist();drawMain();});
+$('mainCanvas').addEventListener('pointerdown',e=>{
+ if(state.view!=='appearance'||state.renderMode!=='3d'||!e.isPrimary||e.button!==0)return;e.preventDefault();orbit={id:e.pointerId,x:e.clientX,y:e.clientY,yaw:state.cameraYaw,pitch:state.cameraPitch};$('mainCanvas').setPointerCapture(e.pointerId);
+});
+$('mainCanvas').addEventListener('pointermove',e=>{if(!orbit||orbit.id!==e.pointerId)return;state.cameraYaw=((orbit.yaw+(e.clientX-orbit.x)*.5+180)%360+360)%360-180;state.cameraPitch=O.clamp(orbit.pitch+(e.clientY-orbit.y)*.35,8,82);syncCamera();drawMain();});
+function finishOrbit(e,cancel=false){if(!orbit||e.pointerId!==orbit.id)return;const old=orbit;orbit=null;if(cancel)Object.assign(state,{cameraYaw:old.yaw,cameraPitch:old.pitch});if($('mainCanvas').hasPointerCapture(old.id))$('mainCanvas').releasePointerCapture(old.id);syncCamera();persist();drawMain();}
+$('mainCanvas').addEventListener('pointerup',e=>finishOrbit(e));$('mainCanvas').addEventListener('pointercancel',e=>finishOrbit(e,true));$('mainCanvas').addEventListener('lostpointercapture',e=>finishOrbit(e,true));
+$('mainCanvas').addEventListener('wheel',e=>{if(state.view!=='appearance'||state.renderMode!=='3d')return;e.preventDefault();state.cameraZoom=O.clamp(state.cameraZoom*Math.exp(-e.deltaY*.001),.5,2.5);syncCamera();persist();drawMain();},{passive:false});
 $('mainCanvas').addEventListener('pointerdown',e=>{
  if(!map||state.view!=='layout'||!e.isPrimary||e.button!==0||dragTape)return;const p=mousePoint(e);
  if(drawingPath){try{if(!O.shapeInfo(state).inside(p.x,p.y))return;}catch(_){return;}pathDraft.push([Math.round(p.x*10)/10,Math.round(p.y*10)/10]);drawMain();return;}
@@ -245,15 +337,15 @@ $('clearManual').addEventListener('click',()=>{selectedTape=-1;commitTapeLayout(
 $('pathDrawBtn').addEventListener('click',()=>{applyChange('view','layout');drawingPath=true;pathDraft=[];syncTapeEditor();drawMain();toast('輪郭内をクリックして経路の点を追加します。Enterで確定、Escapeで取り消します。');});
 function finishPath(){if(!drawingPath)return;if(pathDraft.length<2){toast('経路には2点以上が必要です。');return;}drawingPath=false;applyChange('path',pathDraft.map(p=>p.join(',')).join('\n'));pathDraft=[];drawMain();}
 $('pathFinishBtn').addEventListener('click',finishPath);
-window.addEventListener('keydown',e=>{if(e.key==='Escape'){discardTapeDrag();if(drawingPath){drawingPath=false;pathDraft=[];syncTapeEditor();drawMain();toast('経路の描画を取り消しました。');}closeModal();}if(e.key==='Enter'&&drawingPath&&document.activeElement.tagName!=='TEXTAREA')finishPath();});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){if(orbit)finishOrbit({pointerId:orbit.id},true);discardTapeDrag();if(drawingPath){drawingPath=false;pathDraft=[];syncTapeEditor();drawMain();toast('経路の描画を取り消しました。');}closeModal();}if(e.key==='Enter'&&drawingPath&&document.activeElement.tagName!=='TEXTAREA')finishPath();});
 function download(name,blob){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);}
 const stamp=()=>new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
-$('saveBtn').addEventListener('click',()=>{download('diffusion-settings-'+stamp()+'.json',new Blob([JSON.stringify({app:'Diffusion Lab',schemaVersion:2,savedAt:new Date().toISOString(),state},null,2)],{type:'application/json'}));toast('設定JSONを保存しました。');});
+$('saveBtn').addEventListener('click',()=>{download('diffusion-settings-'+stamp()+'.json',new Blob([JSON.stringify({app:'Diffusion Lab',schemaVersion:2,savedAt:new Date().toISOString(),state:{...state,gamingPlaying:false}},null,2)],{type:'application/json'}));toast('設定JSONを保存しました。');});
 $('loadBtn').addEventListener('click',()=>$('fileInput').click());
 $('fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>2*1024*1024)throw Error('設定ファイルは2 MB以下にしてください。');const data=JSON.parse(await f.text());if(data.schemaVersion&&![1,2].includes(data.schemaVersion))throw Error('この設定ファイルの版には対応していません。');const s=data.state||data;if(!s||typeof s!=='object'||Array.isArray(s)||!('width' in s)||!('gap' in s))throw Error('Diffusion Labの設定JSONではありません。');const loaded=O.normalize(s);O.makeLEDs(loaded);resetTapeEditor();state=loaded;persist();syncControls();clearSweepForChange();requestCompute(0);toast('設定を読み込みました。');}catch(error){toast('読み込みできません: '+error.message);}finally{e.target.value='';}});
 $('csvBtn').addEventListener('click',()=>{if(!result)return;const r=result,lines=['x_mm,y_mm,in_evaluation_region,R_cd_m2,G_cd_m2,B_cd_m2,total_cd_m2,incident_total_lux'];for(let y=0;y<r.ny;y++)for(let x=0;x<r.nx;x++){const i=y*r.nx+x;if(!r.mask[i])continue;const v=r.fields.map(f=>f[i]);lines.push([(x+.5)*r.dx-r.state.width/2,(y+.5)*r.dy-r.state.height/2,r.roiMask[i],...v,v[0]+v[1]+v[2],r.irradiance.reduce((sum,f)=>sum+f[i],0)].map(n=>typeof n==='number'?Number(n.toPrecision(8)):n).join(','));}download('diffusion-grid-'+stamp()+'.csv',new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));toast('線形データをCSVで保存しました。');});
 $('pngBtn').addEventListener('click',()=>{
- if(!result)return;const r=result,c=document.createElement('canvas');c.width=1600;c.height=1060;const ctx=c.getContext('2d');ctx.fillStyle='#10131a';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#eef0f8';ctx.font='bold 34px system-ui,sans-serif';ctx.fillText('Diffusion Lab — LED 面発光シミュレーション',64,76);ctx.fillStyle='#a0a9bf';ctx.font='18px system-ui,sans-serif';ctx.fillText('正面・平行平面の近似 / 未校正 / 同一露出で比較',64,113);ctx.fillStyle='#0b0e14';ctx.fillRect(48,150,1504,620);drawSurface(ctx,r,{x:110,y:190,w:1380,h:530},displayOptions());ctx.fillStyle='#edf0f8';ctx.font='24px ui-monospace,monospace';ctx.fillText(`${format(r.state.width,0)} × ${format(r.state.height,0)} mm   |   d = ${format(r.state.gap,2)} mm   |   ${O.ledDescription(r.state).label}   |   ${r.leds.length} LEDs`,64,819);ctx.font='19px system-ui,sans-serif';ctx.fillStyle='#a0a9bf';ctx.fillText(`均一さ P5/P95: ${r.stats.robust===null?'—':format(r.stats.robust*100,1)}%   平均輝度: ${format(r.stats.mean,1)} cd/m²   端除外: ${r.state.roi} mm`,64,858);ctx.fillText(`材料 ${r.state.argb} / 厚さ ${r.state.thickness} mm / 透過率 ${r.state.transmission}% / 拡散成分 ${r.state.diffuse}% / σ ${format(r.state.thickness*r.state.spread,2)} mm`,64,892);ctx.fillText(`LED出力 ${r.state.brightness}% / ピッチ ${format(r.pitch,2)} mm / 半値角全幅 ${r.state.angle}° / 表示露出 ${state.exposure} EV`,64,926);ctx.fillStyle='#7b86a1';ctx.font='16px system-ui,sans-serif';const ledInfo=O.ledDescription(r.state);ctx.fillText(`有効幅 ${format(r.state.aperture,3)} mm（${ledInfo.widthBasis}） / 半値角全幅 ${r.state.angle}°（${ledInfo.angleBasis}）`,64,960);ctx.fillText('未校正の比較モデル。開口寸法からの幅は近似、未記載値は仮定。反射・屈折・曲面は非対応。',64,989);ctx.fillText('Diffusion Lab 1.0  |  '+new Date().toISOString(),64,1017);c.toBlob(blob=>{if(blob)download('diffusion-preview-'+stamp()+'.png',blob);else toast('PNG生成に失敗しました。');},'image/png');
+ if(!result)return;const r=result,c=document.createElement('canvas');c.width=1600;c.height=1060;const ctx=c.getContext('2d');ctx.fillStyle='#10131a';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#eef0f8';ctx.font='bold 34px system-ui,sans-serif';ctx.fillText('Diffusion Lab — LED 面発光シミュレーション',64,76);ctx.fillStyle='#a0a9bf';ctx.font='18px system-ui,sans-serif';ctx.fillText('正面・平行平面の近似 / 未校正 / 同一露出で比較',64,113);ctx.fillStyle='#0b0e14';ctx.fillRect(48,150,1504,620);if(state.view==='appearance'&&state.renderMode==='3d'){const c3d=document.createElement('canvas');c3d.width=1504;c3d.height=620;DiffusionView3D.render(c3d.getContext('2d'),r,{width:1504,height:620,texture:bitmap(r,displayOptions()),optics:O,yaw:state.cameraYaw,pitch:state.cameraPitch,zoom:state.cameraZoom,showLED:state.showLED,showGrid:state.showGrid});ctx.drawImage(c3d,48,150);}else drawSurface(ctx,r,{x:110,y:190,w:1380,h:530},displayOptions());ctx.fillStyle='#edf0f8';ctx.font='24px ui-monospace,monospace';ctx.fillText(`${format(r.state.width,0)} × ${format(r.state.height,0)} mm   |   d = ${format(r.state.gap,2)} mm   |   ${O.ledDescription(r.state).label}   |   ${r.leds.length} LEDs`,64,819);ctx.font='19px system-ui,sans-serif';ctx.fillStyle='#a0a9bf';ctx.fillText(`均一さ P5/P95: ${r.stats.robust===null?'—':format(r.stats.robust*100,1)}%   平均輝度: ${format(r.stats.mean,1)} cd/m²   端除外: ${r.state.roi} mm`,64,858);ctx.fillText(`材料 ${r.state.argb} / 厚さ ${r.state.thickness} mm / 透過率 ${r.state.transmission}% / 拡散成分 ${r.state.diffuse}% / σ ${format(r.state.thickness*r.state.spread,2)} mm`,64,892);ctx.fillText(`LED出力 ${r.state.brightness}% / ピッチ ${format(r.pitch,2)} mm / 半値角全幅 ${r.state.angle}° / 表示露出 ${state.exposure} EV`,64,926);ctx.fillStyle='#7b86a1';ctx.font='16px system-ui,sans-serif';const ledInfo=O.ledDescription(r.state);ctx.fillText(`有効幅 ${format(r.state.aperture,3)} mm（${ledInfo.widthBasis}） / 半値角全幅 ${r.state.angle}°（${ledInfo.angleBasis}）`,64,960);ctx.fillText('未校正の比較モデル。開口寸法からの幅は近似、未記載値は仮定。反射・屈折・曲面は非対応。',64,989);ctx.fillText('Diffusion Lab 1.0  |  '+new Date().toISOString(),64,1017);c.toBlob(blob=>{if(blob)download('diffusion-preview-'+stamp()+'.png',blob);else toast('PNG生成に失敗しました。');},'image/png');
 });
 let modalReturn=null;
 function showModal(){modalReturn=document.activeElement;$('modelModal').hidden=false;$('closeModal').focus();}
@@ -271,8 +363,8 @@ $('selfTestBtn').addEventListener('click',()=>{
  toast(failures.length?'セルフテスト失敗: '+failures.join(' / '):'セルフテスト 5/5 合格：逆二乗則・色変換・ARGB・FFT。実物との一致を保証するテストではありません。');
 });
 let resizeTimer;new ResizeObserver(()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(renderAll,80);}).observe($('canvasWrap'));
-window.addEventListener('beforeunload',()=>{if(worker)worker.terminate();if(sweepWorker)sweepWorker.terminate();});
+window.addEventListener('beforeunload',()=>{if(worker)worker.terminate();if(sweepWorker)sweepWorker.terminate();if(gamingWorker)gamingWorker.terminate();persist();});
 // Read-only diagnostics and an explicit setter are useful for reproducible validation.
-window.DiffusionLab={getState:()=>structuredClone(state),getResult:()=>result,setState:s=>{resetTapeEditor();state=O.normalize({...state,...s});persist();syncControls();clearSweepForChange();requestCompute(0);},isBusy:()=>busy||pending!==null,getSweep:()=>sweepResults,version:'1.0'};
+window.DiffusionLab={getState:()=>structuredClone(state),getResult:()=>result,setState:s=>{resetTapeEditor();state=O.normalize({...state,...s});persist();syncControls();clearSweepForChange();requestCompute(0);},isBusy:()=>busy||pending!==null||gamingPreparing,getGaming:()=>({preparing:gamingPreparing,frames:gamingFrames.length,playing:gamingActive()}),getSweep:()=>sweepResults,version:'1.0'};
 syncControls();initWorker();renderAll();requestCompute(0);
 })();

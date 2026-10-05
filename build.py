@@ -16,7 +16,7 @@ import shutil
 import sys
 
 ROOT = Path(__file__).resolve().parent
-SOURCES = {"CSS": "style.css", "CORE": "optics.js", "WORKER": "worker.js", "APP": "app.js"}
+SOURCES = {"CSS": "style.css", "CORE": "optics.js", "WORKER": "worker.js", "SVG": "svg-import.js", "GAMING": "gaming.js", "TAPES": "tape-tools.js", "VIEW3D": "view3d.js", "APP": "app.js"}
 TOKEN_PATTERN = re.compile(r"/\*__[A-Z_]+__\*/")
 
 
