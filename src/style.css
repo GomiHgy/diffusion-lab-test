@@ -10,3 +10,5 @@
 
 /* テープのキーボード移動・回転ハンドル */
 #mainCanvas:focus-visible{outline:2px solid #71e5cf;outline-offset:-3px}.tape-rotation-mode{position:absolute;left:14px;top:42px;max-width:calc(100% - 28px);padding:7px 10px;border:1px solid #a99aff88;border-radius:7px;background:#171624ed;display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:10px;color:#d7ccff}.tape-rotation-mode strong{font-weight:500}.tape-rotation-mode span{font-size:9px;color:#b7b0cb}.tape-rotation-mode output{font-family:var(--mono);margin-left:6px}.rotation-active{border:1px solid #a99aff88;border-radius:7px;padding:7px;margin-top:9px}.tape-rotation-mode[hidden]{display:none}
+
+.cylinder-radius{padding:14px 20px;margin:0;border-top:1px solid #30364a;color:var(--muted);}

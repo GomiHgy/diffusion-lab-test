@@ -5,6 +5,7 @@
 const Gaming=root.Gaming||(typeof require==='function'?require('./gaming.js'):null);
 const TapeGeometry=root.TapeGeometry||(typeof require==='function'?require('./tape-geometry.js'):null);
 const TapePlacement=root.TapePlacement||(typeof require==='function'?require('./tape-placement.js'):null);
+const CylinderOptics=root.CylinderOptics||(typeof require==='function'?require('./cylinder-optics.js'):null);
 const PI=Math.PI, Y=[0.2126,0.7152,0.0722];
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 // 出典の窓寸法と光学的な有効発光面は別物。未記載の値を製品仕様にしない。
@@ -36,6 +37,7 @@ function profileAperture(p){return p.windowDiameter===null?p.assumedAperture:p.w
 function profileIntensity(p){const v=p.photometry;return v.typ?v.typ.slice():v.min.map((x,i)=>(x+v.max[i])/2);}
 function profileValues(p){const [mcdR,mcdG,mcdB]=profileIntensity(p);return {packageSize:p.packageSize,aperture:profileAperture(p),angle:p.angle===null?p.assumedAngle:p.angle,mcdR,mcdG,mcdB};}
 const defaults={
+ geometryMode:'plane',cylinderDiameter:80,cylinderLength:200,cylinderTapeLength:160,cylinderAngle:0,
  version:1,shape:'rounded',width:160,height:72,radius:10,hole:0.46,
  polygon:'50,2\n88,16\n98,50\n75,94\n25,94\n2,50\n12,16',
  svgShapes:[],svgLabel:'',
@@ -52,8 +54,8 @@ const defaults={
  renderMode:'2d',cameraYaw:-25,cameraPitch:55,cameraZoom:1,
  customLabel:'未校正・比較用の仮定値'
 };
-const ENUMS={shape:['rect','rounded','ellipse','ring','polygon','svg'],layout:['rows','grid','perimeter','ring','path','manual'],ledModel:[...Object.keys(ledProfiles),'custom'],package:['5050','3535','2020','custom'],pattern:['solid','gradient','alternating','rainbow','rgb','gaming'],gamingScene:['rainbowWave','chase','breathe','cyberPulse'],renderMode:['2d','3d'],pwmMode:['raw','srgb'],material:['opal','strong','frost','clear','foam','custom'],tone:['compress','linear'],view:['appearance','heat','layout']};
-const RANGES={tapeCount:[0,100],tapeWidth:[.1,100],gamingSpeed:[.1,3],gamingPhase:[0,1],cameraYaw:[-180,180],cameraPitch:[8,82],cameraZoom:[.5,2.5],width:[10,2000],height:[10,2000],radius:[0,1000],hole:[0.05,0.95],density:[1,1000],rowSpacing:[1,1000],inset:[0,1000],rotation:[-180,180],packageSize:[0.5,20],aperture:[0.05,20],angle:[10,175],mcdR:[0,200000],mcdG:[0,200000],mcdB:[0,200000],brightness:[0,100],gap:[0.25,300],thickness:[0.1,30],transmission:[0,100],diffuse:[0,100],spread:[0,5],roi:[0,500],exposure:[-6,6],whiteLevel:[1,1000000],ambient:[0,10000],target:[0,100]};
+const ENUMS={geometryMode:['plane','cylinder'],shape:['rect','rounded','ellipse','ring','polygon','svg'],layout:['rows','grid','perimeter','ring','path','manual'],ledModel:[...Object.keys(ledProfiles),'custom'],package:['5050','3535','2020','custom'],pattern:['solid','gradient','alternating','rainbow','rgb','gaming'],gamingScene:['rainbowWave','chase','breathe','cyberPulse'],renderMode:['2d','3d'],pwmMode:['raw','srgb'],material:['opal','strong','frost','clear','foam','custom'],tone:['compress','linear'],view:['appearance','heat','layout']};
+const RANGES={cylinderDiameter:[10,2000],cylinderLength:[10,2000],cylinderTapeLength:[1,2000],cylinderAngle:[-180,180],tapeCount:[0,100],tapeWidth:[.1,100],gamingSpeed:[.1,3],gamingPhase:[0,1],cameraYaw:[-180,180],cameraPitch:[8,82],cameraZoom:[.5,2.5],width:[10,2000],height:[10,2000],radius:[0,1000],hole:[0.05,0.95],density:[1,1000],rowSpacing:[1,1000],inset:[0,1000],rotation:[-180,180],packageSize:[0.5,20],aperture:[0.05,20],angle:[10,175],mcdR:[0,200000],mcdG:[0,200000],mcdB:[0,200000],brightness:[0,100],gap:[0.25,300],thickness:[0.1,30],transmission:[0,100],diffuse:[0,100],spread:[0,5],roi:[0,500],exposure:[-6,6],whiteLevel:[1,1000000],ambient:[0,10000],target:[0,100]};
 function normalize(input={}) {
  const s={...defaults};
  for(const k in defaults) if(Object.prototype.hasOwnProperty.call(input,k)) s[k]=input[k];
@@ -246,6 +248,7 @@ function moveTape(s,layout,index,x,y){
  return {manual,tapeLengths:validTapeLengths(manual.length,layout.tapeLengths)};
 }
 function makeLEDs(s){
+ if(s.geometryMode==='cylinder')return CylinderOptics.layout(api,s);
  // 不正な輪郭は候補を全て除外する扱いにせず、読み込み・計算を拒否する。
  shapeInfo(s);
  const pitch=1000/s.density;
@@ -296,6 +299,7 @@ function statistics(fields,mask,roiMask,nx,ny,dx,dy){const values=[],all=[];let 
 class Solver {
  constructor(){this.cache=null;this.kernel=null;}
  solve(input,options={}){
+  if(input?.geometryMode==='cylinder')return CylinderOptics.solve(api,normalize(input),options);
   const start=Date.now(),s=normalize(input),geo=makeLEDs(s),{leds}=geo,info=shapeInfo(s);
   const res=options.resolution||s.quality,step=Math.max(s.width,s.height)/res,nx=Math.max(16,Math.round(s.width/step)),ny=Math.max(16,Math.round(s.height/step)),dx=s.width/nx,dy=s.height/ny;
   const sourceKey=JSON.stringify([nx,ny,s.width,s.height,s.aperture,s.splitRGB,s.mcdR,s.mcdG,s.mcdB,leds]);

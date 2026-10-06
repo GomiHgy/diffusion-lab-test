@@ -6,6 +6,7 @@ self.onmessage=function(e){const {id,type,state,distances}=e.data;
    const total=24;for(let i=0;i<total;i++){const result=solver.solve({...state,gamingPhase:i/total},{resolution:160});const transfers=[...result.fields,...result.irradiance,result.mask,result.roiMask].map(a=>a.buffer);self.postMessage({id,type:'gamingItem',index:i,total,result},transfers);}
    self.postMessage({id,type:'gamingDone'});
   }else if(type==='sweep'){
+   if(state.geometryMode==='cylinder')throw Error('円筒の6距離比較には対応していません。内径を変更し、比較基準に保存して比べてください。');
    for(let i=0;i<distances.length;i++){
     const result=solver.solve({...state,gap:distances[i]},{resolution:160});
     self.postMessage({id,type:'sweepItem',index:i,total:distances.length,result});

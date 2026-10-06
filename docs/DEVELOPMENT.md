@@ -17,9 +17,11 @@
 | `src/tape-tools.js` | 接続したテープの本数変更・剛体回転・整列 |
 | `src/gaming.js` | RGB演出の周期PWMと線形光学フィールドの時間補間 |
 | `src/view3d.js` | 計算結果の3D投影、厚さ・ギャップ・穴・視点 |
+| `src/cylinder-optics.js` | 円筒中心軸の折り返し1本・両面配光、内壁照度、円周周期の拡散 |
+| `src/cylinder-view.js` | 円筒外面の3D投影、開いた端部、折り返し配線の模式図 |
 | `src/app.js` | 設定入力、画面描画、比較、ファイル入出力 |
 
-`build.py` はテンプレートの10個の置換位置を検査して、ソースを変更せずに埋め込みます。
+`build.py` はテンプレートの12個の置換位置を検査して、ソースを変更せずに埋め込みます。
 Workerも同じHTMLからBlobとして生成します。GitHub Pagesのプロジェクト名付きURLでも、別ファイルのWorkerパスを組み立てる必要はありません。
 このパッケージ化では光学計算・画面コードに変更を加えていません。
 
@@ -57,7 +59,7 @@ python build.py --check
 ```sh
 python build.py
 python -m unittest discover -s tests -p "test_build.py" -v
-node --test tests/test_optics.js tests/test_led_profiles.js tests/test_photometry.js tests/test_svg.js tests/test_tape_tools.js tests/test_tape_geometry.js tests/test_tape_placement.js tests/test_gaming.js tests/test_view3d.js
+node --test tests/test_optics.js tests/test_led_profiles.js tests/test_photometry.js tests/test_svg.js tests/test_tape_tools.js tests/test_tape_geometry.js tests/test_tape_placement.js tests/test_gaming.js tests/test_view3d.js tests/test_cylinder.js tests/test_cylinder_view.js
 ```
 
 ブラウザテスト用の依存をインストールします。Pythonの仮想環境の使用は任意です。
@@ -70,6 +72,7 @@ python tests/test_features.py
 python tests/test_interactions.py
 python tests/test_photometry.py
 python tests/test_tape_outline.py
+python tests/test_cylinder_browser.py
 ```
 
 LinuxのCIでOSライブラリも導入する場合は、同梱ワークフローと同じ次のコマンドを使います。
@@ -83,6 +86,7 @@ python -m playwright install --with-deps chromium
 `test_features.py` は本数・回転・整列、3Dの視点とPNG、動くRGBの準備・停止・指定精度・JSON、同位相の距離比較を確認します。
 `test_photometry.js` / `test_photometry.py` は型番別RGB光度、光度と推定光束の単位・配光積分、出力係数、旧設定の保持、求解・演出・2D/3Dへの反映を確認します。
 `test_tape_geometry.js` / `test_tape_placement.js` は連続した基板形状とSVGの実境界を使い、細い切り欠き、接続内部に隠れた穴、離れた島、端部、余白、接続順、分割、手動経路を確認します。`test_tape_outline.py` はコの字SVGで幅入力、自動分割、ドラッグ・座標・矢印・回転・整列の拒否と元データの保持、2D/3D表示、JSON互換を確認します。
+`test_cylinder.js` は独立した3Dの内積式との一致、折り返し順とRGB、円周の連続性、PWM・距離・面積補正、軸端のROI、入力保持と不正値を確認します。`test_cylinder_view.js` は内外径・発光方向・視点・開口のクリッピング・テクスチャを確認します。`test_cylinder_browser.py` は円筒の入力、展開2D・3D、動くRGB、エラーからの復帰、JSON・CSV・PNG、平面との往復、モバイル幅を確認します。
 テストの出力、PNG、JSON、CSVは `tests/artifacts/` に保存します。このフォルダーはGit管理対象外です。
 
 Playwrightが取得したブラウザではなく、既存のChromiumを利用する場合は `CHROMIUM_PATH` を指定します。
