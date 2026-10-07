@@ -77,14 +77,15 @@ function render(ctx,result,options={}){
    }
   }
  }
- function part(world,color,normal,position,kind){if(normal&&dot(normal,camera.position.map((v,i)=>v-position[i]))<=1e-9)return;const points=projectPoints(world,project);parts.push({points,color,kind,depth:points.reduce((v,p)=>v+p.depth,0)/points.length});}
+ function part(world,color,normal,position,kind,layer=1){if(normal&&dot(normal,camera.position.map((v,i)=>v-position[i]))<=1e-9)return;const points=projectPoints(world,project);parts.push({points,color,kind,layer,depth:points.reduce((v,p)=>v+p.depth,0)/points.length});}
  if(options.showLED!==false){
   for(const face of tape.tapeFaces)part(face.polygon,'#151922',face.normal,[0,0,0],'tape');
   const a=tape.tapeFaces[0].polygon,b=tape.tapeFaces[1].polygon;
   for(let i=0;i<4;i++){const k=(i+1)%4;part([a[i],a[k],b[k],b[i]],'#394353',null,[0,0,0],'tape');}
   for(const pack of tape.packages){
-   part(pack.front,'#c3c7ce',pack.normal,pack.position,'package');part(pack.light,rgbColor(pack.led.rgb),pack.normal,pack.position,'light');
-   for(let i=0;i<4;i++){const k=(i+1)%4;part([pack.back[i],pack.back[k],pack.front[k],pack.front[i]],'#6c788c',null,pack.position,'package');}
+   const layer=dot(pack.normal,camera.position.map((v,i)=>v-pack.position[i]))>=0?2:0;
+   part(pack.front,'#c3c7ce',pack.normal,pack.position,'package',layer);part(pack.light,rgbColor(pack.led.rgb),pack.normal,pack.position,'light',layer);
+   for(let i=0;i<4;i++){const k=(i+1)%4;part([pack.back[i],pack.back[k],pack.front[k],pack.front[i]],'#6c788c',null,pack.position,'package',layer);}
   }
  }
  ctx.save();ctx.clearRect(0,0,camera.width,camera.height);ctx.imageSmoothingEnabled=true;
@@ -93,7 +94,10 @@ function render(ctx,result,options={}){
  // 不透明な側壁を透かしてLEDを浮き上がらせない。
  ctx.save();path(ctx,projectPoints(near.inner,project));ctx.clip();
  inner.sort((a,b)=>a.depth-b.depth);for(const face of inner){const v=Math.round(24+face.shade*14);fill(ctx,face.points,`rgb(${v},${v+5},${v+14})`);}
- parts.sort((a,b)=>a.depth-b.depth);for(const p of parts)fill(ctx,p.points,p.color,p.kind==='light'?null:'#a5b1c533');ctx.restore();
+ // 長い基板を平均深度でLEDと混ぜると、基板が奥半分のLEDを覆ってしまう。
+ // 基板から見た裏側のパッケージ→基板→表側のLEDの順にし、各層の中だけ深度順にする。
+ parts.sort((a,b)=>a.layer-b.layer||a.depth-b.depth);
+ for(const p of parts)fill(ctx,p.points,p.color,p.kind==='light'?null:'#a5b1c533');ctx.restore();
  outer.sort((a,b)=>a.depth-b.depth);ctx.save();
  // 三角形の重なりが側壁のシルエットや開端へはみ出さないよう、面の合成輪郭で制限する。
  ctx.beginPath();for(const face of outer){face.points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();}ctx.clip();

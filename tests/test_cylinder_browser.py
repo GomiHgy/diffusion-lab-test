@@ -238,6 +238,48 @@ with LocalSite(ROOT / 'dist').start() as site, sync_playwright() as playwright:
     page.locator('[data-key="renderMode"]').select_option('3d')
     check('Cylinder 3D and camera toolbar fit the mobile width', page.locator('#cameraControls').is_visible() and page.evaluate('document.documentElement.scrollWidth<=390'))
     page.screenshot(path=str(ART / 'cylinder-mobile.png'), full_page=True)
+
+    # 長い基板に奥半分のLEDが覆われた実際の設定を、描画ピクセルまで検証する。
+    page.set_viewport_size({'width': 1680, 'height': 1320})
+    set_state(page, {'geometryMode': 'cylinder', 'cylinderDiameter': 100, 'cylinderLength': 200,
+                     'cylinderTapeLength': 200, 'cylinderAngle': 0, 'tapeWidth': 10, 'density': 144,
+                     'ledModel': 'WS2812B', 'packageSize': 5.4, 'aperture': 3.545,
+                     'pattern': 'rainbow', 'brightness': 40, 'renderMode': '3d', 'showLED': True,
+                     'cameraYaw': -25, 'cameraPitch': 75, 'cameraZoom': 1, 'showGrid': False})
+    check('Reported 100 by 200 cylinder places 28 LEDs on each full-length folded side', page.evaluate('''()=>{
+      const r=DiffusionLab.getResult();return r.leds.length===56&&r.tapeLengths[0]===56&&
+        Math.min(...r.leds.map(p=>p.y))===-93.75&&Math.max(...r.leds.map(p=>p.y))===93.75;
+    }'''))
+    page.locator('#mainCanvas').screenshot(path=str(ART / 'cylinder-full-length-3d.png'))
+
+    def emitter_pixels(yaw, pitch, angle, shown=True):
+        return page.evaluate('''({yaw,pitch,angle,shown})=>{
+          const r=new Optics.Solver().solve({...DiffusionLab.getState(),pattern:'solid',color1:'#ff0000',cylinderAngle:angle});
+          const canvas=document.createElement('canvas');canvas.width=2000;canvas.height=1400;
+          const ctx=canvas.getContext('2d'),out=CylinderView.render(ctx,r,{width:canvas.width,height:canvas.height,yaw,pitch,showLED:shown,showGrid:false});
+          const packs=out.tape.packages.filter(pack=>pack.normal.reduce((v,n,k)=>v+n*(out.camera.position[k]-pack.position[k]),0)>0);
+          return packs.map(pack=>{
+            const center=pack.light.reduce((v,p)=>v.map((a,k)=>a+p[k]/4),[0,0,0]),p=out.project(...center);
+            // 発光点からカメラへの線が開口面を通る位置を独立に求める。
+            // 側面寄りの視点では、筒壁に隠れるLEDがあるのが正しい。
+            const u=(r.state.cylinderLength/2-center[1])/(out.camera.position[1]-center[1]);
+            const entry=center.map((v,k)=>v+(out.camera.position[k]-v)*u);
+            if(Math.hypot(entry[0],entry[2])>r.state.cylinderDiameter/2-2)return null;
+            const data=ctx.getImageData(Math.floor(p.x)-1,Math.floor(p.y)-1,3,3).data;
+            let red=0;for(let i=0;i<data.length;i+=4)red=Math.max(red,data[i]-Math.max(data[i+1],data[i+2]));
+            return {index:pack.index,axial:pack.position[1],red};
+          }).filter(Boolean);
+        }''', {'yaw': yaw, 'pitch': pitch, 'angle': angle, 'shown': shown})
+
+    for label, yaw, pitch, angle in [('reported view', -25, 75, 0), ('oblique view', -25, 55, 0),
+                                     ('opposite side', 155, 75, 0), ('rotated tape', 0, 75, 90),
+                                     ('near axial view', -25, 82, 0)]:
+        samples = emitter_pixels(yaw, pitch, angle)
+        count_correct = 0 < len(samples) < 28 if pitch == 55 else len(samples) == 28
+        check('Every emitter visible through the opening survives PCB occlusion: ' + label,
+              count_correct and all(sample['red'] > 45 for sample in samples))
+    hidden = emitter_pixels(-25, 75, 0, shown=False)
+    check('Hidden tape does not leave red emitters at their projected axis positions', all(sample['red'] <= 5 for sample in hidden))
     check('Cylinder operations produce no browser exceptions', not errors)
     check('Cylinder optics, rendering and exports require no external runtime requests', all(url.startswith(site.url) or url.startswith('blob:') or url.startswith('data:') for url in requests))
     browser.close()
